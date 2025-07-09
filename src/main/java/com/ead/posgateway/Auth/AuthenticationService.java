@@ -11,8 +11,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -21,6 +23,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 @Service
@@ -35,6 +39,11 @@ public class AuthenticationService {
     private final UserDetailsService userDetailsService;
     private final TokenRepository tokenRepository;
 
+    @Value("${spring.application.security.lockout.max-failed-attempts:5}")
+    private int maxFailedAttempts;
+    @Value("${spring.application.security.lockout.cooldown-minutes:15}")
+    private int cooldownMinutes;
+
     public AuthenticationResponse register(RegisterRequest request) {
         var user = User.builder()
                 .firstName(request.getFirstName())
@@ -42,6 +51,9 @@ public class AuthenticationService {
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(request.getRole())
+                .failedLoginAttempts(0)
+                .accountLocked(false)
+                .lockTime(null)
                 .build();
         var savedUser = userRepository.save(user);
         var jwtToken = jwtService.generateToken(user);
@@ -58,20 +70,63 @@ public class AuthenticationService {
     }
 
     public AuthenticationResponse authenticate(AuthenticationRequest request) {
-        // Authenticate the user
-        var authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.getEmail(),
-                        request.getPassword()
-                )
-        );
-        
-        log.info("User authenticated successfully: {} with authorities: {}", 
-                request.getEmail(), 
-                authentication.getAuthorities());
-        
-        var user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow();
+        var userOpt = userRepository.findByEmail(request.getEmail());
+        if (userOpt.isEmpty()) {
+            throw new BadCredentialsException("Invalid email or password");
+        }
+        var user = userOpt.get();
+
+        // Check if account is locked and if cooldown has expired
+        if (user.isAccountLocked()) {
+            if (user.getLockTime() != null) {
+                long minutesSinceLock = ChronoUnit.MINUTES.between(user.getLockTime(), LocalDateTime.now());
+                if (minutesSinceLock >= cooldownMinutes) {
+                    // Unlock account
+                    user.setAccountLocked(false);
+                    user.setFailedLoginAttempts(0);
+                    user.setLockTime(null);
+                    userRepository.save(user);
+                } else {
+                    long remainingMinutes = cooldownMinutes - minutesSinceLock;
+                    throw new AccountLockedException("Account is locked due to too many failed login attempts. Try again in " + remainingMinutes + " minutes.", remainingMinutes);
+                }
+            } else {
+                throw new AccountLockedException("Account is locked. Contact administrator for assistance.");
+            }
+        }
+
+        try {
+            // Authenticate the user
+            var authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.getEmail(),
+                            request.getPassword()
+                    )
+            );
+            log.info("User authenticated successfully: {} with authorities: {}", 
+                    request.getEmail(), 
+                    authentication.getAuthorities());
+            // Reset failed attempts on success
+            user.setFailedLoginAttempts(0);
+            user.setAccountLocked(false);
+            user.setLockTime(null);
+            userRepository.save(user);
+        } catch (BadCredentialsException ex) {
+            // Increment failed attempts
+            int attempts = user.getFailedLoginAttempts() + 1;
+            user.setFailedLoginAttempts(attempts);
+            if (attempts >= maxFailedAttempts) {
+                user.setAccountLocked(true);
+                user.setLockTime(LocalDateTime.now());
+            }
+            userRepository.save(user);
+            if (user.isAccountLocked()) {
+                throw new AccountLockedException("Account is locked due to too many failed login attempts. Try again in " + cooldownMinutes + " minutes.", cooldownMinutes);
+            } else {
+                throw new BadCredentialsException("Invalid email or password. Attempts left: " + (maxFailedAttempts - attempts));
+            }
+        }
+
         var jwtToken = jwtService.generateToken(user);
         var refreshToken = jwtService.generateRefreshToken(user);
         saveUserToken(user, jwtToken, TokenType.BEARER);
@@ -154,5 +209,12 @@ public class AuthenticationService {
                 }
             }
         }
+    }
+
+    /**
+     * Get user repository for account status checks
+     */
+    public UserRepository getUserRepository() {
+        return userRepository;
     }
 }

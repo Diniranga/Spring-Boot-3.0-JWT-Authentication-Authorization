@@ -1,5 +1,6 @@
 package com.ead.posgateway.Config;
 
+import com.ead.posgateway.Auth.AccountLockedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,12 +26,24 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
     }
 
+    @ExceptionHandler(AccountLockedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccountLockedException(AccountLockedException e) {
+        log.error("Account locked: {}", e.getMessage());
+        Map<String, Object> response = new HashMap<>();
+        response.put("error", "Account locked");
+        response.put("message", e.getMessage());
+        response.put("accountLocked", true);
+        response.put("remainingMinutes", e.getRemainingMinutes());
+        response.put("permanentlyLocked", e.isPermanentlyLocked());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+    }
+
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<Map<String, String>> handleBadCredentialsException(BadCredentialsException e) {
         log.error("Bad credentials: {}", e.getMessage());
         Map<String, String> response = new HashMap<>();
         response.put("error", "Invalid credentials");
-        response.put("message", "Email or password is incorrect");
+        response.put("message", e.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
     }
 

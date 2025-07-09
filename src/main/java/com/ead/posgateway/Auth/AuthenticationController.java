@@ -11,6 +11,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -108,6 +110,34 @@ public class AuthenticationController {
             response.put("message", "All sessions logged out successfully");
         } else {
             response.put("message", "User not authenticated");
+        }
+        
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/account-status")
+    public ResponseEntity<Map<String, Object>> getAccountStatus(@RequestBody AuthenticationRequest request) {
+        Map<String, Object> response = new HashMap<>();
+        
+        var userOpt = service.getUserRepository().findByEmail(request.getEmail());
+        if (userOpt.isEmpty()) {
+            response.put("exists", false);
+            response.put("message", "Account not found");
+        } else {
+            var user = userOpt.get();
+            response.put("exists", true);
+            response.put("accountLocked", user.isAccountLocked());
+            response.put("failedLoginAttempts", user.getFailedLoginAttempts());
+            
+            if (user.isAccountLocked() && user.getLockTime() != null) {
+                long minutesSinceLock = ChronoUnit.MINUTES.between(
+                    user.getLockTime(), LocalDateTime.now());
+                long remainingMinutes = Math.max(0, 15 - minutesSinceLock); // 15 is cooldown from config
+                response.put("remainingLockMinutes", remainingMinutes);
+                response.put("lockTime", user.getLockTime());
+            }
+            
+            response.put("message", "Account status retrieved");
         }
         
         return ResponseEntity.ok(response);
