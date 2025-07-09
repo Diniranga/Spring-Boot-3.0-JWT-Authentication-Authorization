@@ -18,9 +18,21 @@ public class SecurityMonitoringService {
 
     @Value("${security.enable-logging:true}")
     private boolean enableLogging;
+    @Value("${security.logging.failed-logins:true}")
+    private boolean logFailedLogins;
+    @Value("${security.logging.successful-logins:true}")
+    private boolean logSuccessfulLogins;
+    @Value("${security.logging.account-lockout:true}")
+    private boolean logAccountLockout;
+    @Value("${security.logging.rate-limit:true}")
+    private boolean logRateLimit;
+    @Value("${security.logging.token-revocation:true}")
+    private boolean logTokenRevocation;
+    @Value("${security.logging.suspicious-activity:true}")
+    private boolean logSuspiciousActivity;
 
     public void logFailedLogin(String email, String ipAddress, String reason) {
-        if (!enableLogging) return;
+        if (!enableLogging || !logFailedLogins) return;
         log.warn("SECURITY_ALERT: Failed login attempt for user: {} from IP: {} - Reason: {} at {}", 
                 email, ipAddress, reason, LocalDateTime.now());
         
@@ -35,7 +47,7 @@ public class SecurityMonitoringService {
     }
 
     public void logRateLimitViolation(String ipAddress, String endpoint) {
-        if (!enableLogging) return;
+        if (!enableLogging || !logRateLimit) return;
         log.warn("SECURITY_ALERT: Rate limit violation from IP: {} on endpoint: {} at {}", 
                 ipAddress, endpoint, LocalDateTime.now());
         
@@ -47,25 +59,25 @@ public class SecurityMonitoringService {
     }
 
     public void logSuccessfulLogin(String email, String ipAddress) {
-        if (!enableLogging) return;
+        if (!enableLogging || !logSuccessfulLogins) return;
         log.info("SECURITY_EVENT: Successful login for user: {} from IP: {} at {}", 
                 email, ipAddress, LocalDateTime.now());
     }
 
     public void logAccountLockout(String email, String ipAddress, long lockoutDuration) {
-        if (!enableLogging) return;
+        if (!enableLogging || !logAccountLockout) return;
         log.error("SECURITY_ALERT: Account locked for user: {} from IP: {} for {} minutes at {}", 
                 email, ipAddress, lockoutDuration / 60000, LocalDateTime.now());
     }
 
     public void logTokenRevocation(String email, String reason) {
-        if (!enableLogging) return;
+        if (!enableLogging || !logTokenRevocation) return;
         log.info("SECURITY_EVENT: Token revoked for user: {} - Reason: {} at {}", 
                 email, reason, LocalDateTime.now());
     }
 
     public void logSuspiciousActivity(String activity, String details) {
-        if (!enableLogging) return;
+        if (!enableLogging || !logSuspiciousActivity) return;
         log.warn("SECURITY_ALERT: Suspicious activity detected - Activity: {} - Details: {} at {}", 
                 activity, details, LocalDateTime.now());
     }

@@ -25,3 +25,10 @@ spring:
       enforce-https: true
       enable-2fa: true
       enable-logging: true
+  logging:
+    failed-logins: true
+    successful-logins: true
+    account-lockout: true
+    rate-limit: true
+    token-revocation: true
+    suspicious-activity: true
