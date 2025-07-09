@@ -73,6 +73,7 @@ public class AuthenticationService {
         var jwtToken = jwtService.generateToken(user);
         var refreshToken = jwtService.generateRefreshToken(user);
         saveUserToken(user,jwtToken);
+        saveRefreshToken(user, refreshToken);
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
                 .refreshToken(refreshToken)
@@ -105,6 +106,29 @@ public class AuthenticationService {
         tokenRepository.saveAll(validTokens);
     }
 
+    private void saveRefreshToken(User user, String refreshToken) {
+        revokeAllUserRefreshTokens(user);
+        var token = Token.builder()
+                .user(user)
+                .token(refreshToken)
+                .tokenType(TokenType.REFRESH)
+                .expired(false)
+                .revoked(false)
+                .build();
+        tokenRepository.save(token);
+    }
+
+    private void revokeAllUserRefreshTokens(User user) {
+        var validTokens = tokenRepository.findAllValidTokenByUser(user.getId());
+        validTokens.stream()
+            .filter(t -> t.getTokenType() == TokenType.REFRESH && !t.isExpired() && !t.isRevoked())
+            .forEach(t -> {
+                t.setExpired(true);
+                t.setRevoked(true);
+            });
+        tokenRepository.saveAll(validTokens);
+    }
+
     public boolean validateToken(String token, String userEmail) {
         UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
         return jwtService.isTokenValid(token,userDetails);
@@ -125,12 +149,23 @@ public class AuthenticationService {
             if (userEmail != null) {
                 var user = this.userRepository.findByEmail(userEmail).orElseThrow();
                 if (jwtService.isTokenValid(refreshToken, user)) {
+                    // Check if refresh token is valid and not revoked
+                    var storedToken = tokenRepository.findByToken(refreshToken)
+                        .filter(t -> t.getTokenType() == TokenType.REFRESH && !t.isExpired() && !t.isRevoked());
+                    if (storedToken.isEmpty()) {
+                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        response.getWriter().write("Refresh token is invalid or revoked");
+                        return;
+                    }
+                    // Issue new access and refresh tokens, revoke old refresh tokens
                     var accessToken = jwtService.generateToken(user);
+                    var newRefreshToken = jwtService.generateRefreshToken(user);
                     revokeAllUserTokens(user);
                     saveUserToken(user, accessToken);
+                    saveRefreshToken(user, newRefreshToken);
                     var authResponse = AuthenticationResponse.builder()
                             .accessToken(accessToken)
-                            .refreshToken(refreshToken)
+                            .refreshToken(newRefreshToken)
                             .build();
                     new ObjectMapper().writeValue(response.getOutputStream(), authResponse);
                 }
