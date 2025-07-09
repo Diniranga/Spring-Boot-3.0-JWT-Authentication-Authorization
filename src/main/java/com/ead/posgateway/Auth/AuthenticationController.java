@@ -83,13 +83,6 @@ public class AuthenticationController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/verify-2fa")
-    public ResponseEntity<AuthenticationResponse> verify2fa(@RequestBody Map<String, String> body) {
-        String email = body.get("email");
-        String code = body.get("code");
-        return ResponseEntity.ok(service.verify2faCode(email, code));
-    }
-
     @PostMapping("/logout")
     public ResponseEntity<Map<String, String>> logout(@RequestHeader("Authorization") String authHeader) {
         Map<String, String> response = new HashMap<>();
@@ -115,100 +108,6 @@ public class AuthenticationController {
             response.put("message", "All sessions logged out successfully");
         } else {
             response.put("message", "User not authenticated");
-        }
-        
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/enable-2fa")
-    public ResponseEntity<Map<String, Object>> enable2fa() {
-        Map<String, Object> response = new HashMap<>();
-        
-        String userEmail = SecurityContextUtils.getCurrentUserEmail();
-        if (userEmail != null) {
-            try {
-                service.enable2faForUser(userEmail);
-                response.put("success", true);
-                response.put("message", "2FA enabled successfully");
-                response.put("userEmail", userEmail);
-            } catch (Exception e) {
-                response.put("success", false);
-                response.put("message", "Failed to enable 2FA: " + e.getMessage());
-            }
-        } else {
-            response.put("success", false);
-            response.put("message", "User not authenticated");
-        }
-        
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/disable-2fa")
-    public ResponseEntity<Map<String, Object>> disable2fa() {
-        Map<String, Object> response = new HashMap<>();
-        
-        String userEmail = SecurityContextUtils.getCurrentUserEmail();
-        if (userEmail != null) {
-            try {
-                service.disable2faForUser(userEmail);
-                response.put("success", true);
-                response.put("message", "2FA disabled successfully");
-                response.put("userEmail", userEmail);
-            } catch (Exception e) {
-                response.put("success", false);
-                response.put("message", "Failed to disable 2FA: " + e.getMessage());
-            }
-        } else {
-            response.put("success", false);
-            response.put("message", "User not authenticated");
-        }
-        
-        return ResponseEntity.ok(response);
-    }
-
-    @GetMapping("/2fa-status")
-    public ResponseEntity<Map<String, Object>> get2faStatus() {
-        Map<String, Object> response = new HashMap<>();
-        
-        String userEmail = SecurityContextUtils.getCurrentUserEmail();
-        if (userEmail != null) {
-            try {
-                boolean user2faEnabled = service.is2faEnabledForUser(userEmail);
-                response.put("success", true);
-                response.put("userEmail", userEmail);
-                response.put("user2faEnabled", user2faEnabled);
-                response.put("global2faEnabled", service.isGlobal2faEnabled());
-                response.put("message", "2FA status retrieved successfully");
-            } catch (Exception e) {
-                response.put("success", false);
-                response.put("message", "Failed to get 2FA status: " + e.getMessage());
-            }
-        } else {
-            response.put("success", false);
-            response.put("message", "User not authenticated");
-        }
-        
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/resend-2fa")
-    public ResponseEntity<Map<String, Object>> resend2faCode(@RequestBody Map<String, String> body) {
-        Map<String, Object> response = new HashMap<>();
-        
-        String email = body.get("email");
-        if (email != null) {
-            try {
-                service.resend2faCode(email);
-                response.put("success", true);
-                response.put("message", "2FA code resent successfully");
-                response.put("userEmail", email);
-            } catch (Exception e) {
-                response.put("success", false);
-                response.put("message", "Failed to resend 2FA code: " + e.getMessage());
-            }
-        } else {
-            response.put("success", false);
-            response.put("message", "Email is required");
         }
         
         return ResponseEntity.ok(response);

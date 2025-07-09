@@ -14,7 +14,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.UUID;
 
 @Service
 public class JwtService {
@@ -28,17 +27,12 @@ public class JwtService {
     @Value("${spring.application.security.jwt.refresh-token.expiration}")
     private long refreshExpiration;
 
-    @Value("${spring.application.security.jwt.issuer:pos-gateway}")
-    private String issuer;
-
-    @Value("${spring.application.security.jwt.audience:pos-gateway-client}")
-    private String audience;
-
     public String extractUserEmail(String jwtToken) {
         return extractClaim(jwtToken, Claims::getSubject);
     }
 
     public String generateToken(UserDetails userDetails){
+
         return generateToken(new HashMap<>(),userDetails);
     }
 
@@ -60,16 +54,12 @@ public class JwtService {
             UserDetails userDetails,
             long expiration
     ){
-        long now = System.currentTimeMillis();
         return Jwts
                 .builder()
                 .setClaims(extraClaims)
                 .setSubject(userDetails.getUsername())
-                .setIssuedAt(new Date(now))
-                .setExpiration(new Date(now + expiration))
-                .setIssuer(issuer)
-                .setAudience(audience)
-                .setId(UUID.randomUUID().toString())
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSignInKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
@@ -83,17 +73,10 @@ public class JwtService {
     }
 
     public boolean isTokenValid(String jwtToken,UserDetails userDetails){
-        final Claims claims = extractAllClaims(jwtToken);
-        if (claims == null) return false;
-        final String userName = claims.getSubject();
+        final String userName = extractUserEmail(jwtToken);
         if(userName == null){
             return false;
         }
-        // Validate issuer, audience, iat, jti
-        if (!issuer.equals(claims.getIssuer())) return false;
-        if (!audience.equals(claims.getAudience())) return false;
-        if (claims.getIssuedAt() == null) return false;
-        if (claims.getId() == null) return false;
         return (userName.equals(userDetails.getUsername())) && !isTokenExpired(jwtToken);
     }
 
@@ -107,22 +90,17 @@ public class JwtService {
 
     private Claims extractAllClaims(String jwtToken) {
         try {
-            Claims claims = Jwts
+            return Jwts
                     .parserBuilder()
                     .setSigningKey(getSignInKey())
                     .build()
                     .parseClaimsJws(jwtToken)
                     .getBody();
-            // Validate issuer, audience, iat, jti
-            if (!issuer.equals(claims.getIssuer())) return null;
-            if (!audience.equals(claims.getAudience())) return null;
-            if (claims.getIssuedAt() == null) return null;
-            if (claims.getId() == null) return null;
-            return claims;
         } catch (Exception e) {
             return null;
         }
     }
+
 
     private Key getSignInKey() {
         byte[] keyBytes = Decoders.BASE64.decode(SECRET_KEY);

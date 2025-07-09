@@ -1,9 +1,4 @@
 spring:
-  web:
-    resources:
-      static-locations: classpath:/static/
-  mvc:
-    static-path-pattern: /**
   datasource:
     url: jdbc:mysql://localhost:3306/jwtSecurity
     username: root
@@ -25,15 +20,17 @@ spring:
         expiration: 86400000
         refresh-token:
           expiration: 604800000 #7 days
-        issuer: pos-gateway
-        audience: pos-gateway-client
-      enforce-https: false
-      enable-2fa: true
-      enable-logging: true
-  logging:
-    failed-logins: true
-    successful-logins: true
-    account-lockout: true
-    rate-limit: true
-    token-revocation: true
-    suspicious-activity: true
+      https:
+        enabled: false
+        redirect-http: true
+        hsts-enabled: true
+        hsts-max-age: 31536000 # 1 year
+
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    key-store: classpath:keystore.p12
+    key-store-password: password
+    key-store-type: PKCS12
+    key-alias: springboot

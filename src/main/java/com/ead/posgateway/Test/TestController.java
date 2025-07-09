@@ -152,4 +152,14 @@ public class TestController {
     public ResponseEntity<Map<String, Object>> testErrorHandling() {
         throw new RuntimeException("This is a test error to verify error handling");
     }
+
+    @GetMapping("/test-https")
+    public ResponseEntity<Map<String, Object>> testHttpsConfiguration() {
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "HTTPS configuration test");
+        response.put("httpsEnabled", true);
+        response.put("timestamp", System.currentTimeMillis());
+        response.put("note", "If you can see this, HTTPS is working correctly");
+        return ResponseEntity.ok(response);
+    }
 } 

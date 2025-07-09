@@ -1,7 +1,6 @@
 package com.ead.posgateway.Auth;
 
 import com.ead.posgateway.Config.SecurityContextUtils;
-import com.ead.posgateway.Config.SecurityMonitoringService;
 import com.ead.posgateway.User.User;
 import com.ead.posgateway.User.UserRepository;
 import com.ead.posgateway.token.TokenRepository;
@@ -16,7 +15,6 @@ public class LogoutService {
 
     private final TokenRepository tokenRepository;
     private final UserRepository userRepository;
-    private final SecurityMonitoringService securityMonitoringService;
 
     public void logout(String token) {
         try {
@@ -27,7 +25,6 @@ public class LogoutService {
                         tokenEntity.setRevoked(true);
                         tokenRepository.save(tokenEntity);
                         log.info("Token revoked for user: {}", tokenEntity.getUser().getEmail());
-                        securityMonitoringService.logTokenRevocation(tokenEntity.getUser().getEmail(), "User logout");
                     });
 
             // Clear security context
@@ -53,7 +50,6 @@ public class LogoutService {
             tokenRepository.saveAll(validTokens);
 
             log.info("All sessions revoked for user: {}", userEmail);
-            securityMonitoringService.logTokenRevocation(userEmail, "All sessions logout");
             
         } catch (Exception e) {
             log.error("Error during logout all sessions: {}", e.getMessage());
