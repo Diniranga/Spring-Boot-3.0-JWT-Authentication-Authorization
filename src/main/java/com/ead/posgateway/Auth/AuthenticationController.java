@@ -83,6 +83,13 @@ public class AuthenticationController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/verify-2fa")
+    public ResponseEntity<AuthenticationResponse> verify2fa(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        String code = body.get("code");
+        return ResponseEntity.ok(service.verify2faCode(email, code));
+    }
+
     @PostMapping("/logout")
     public ResponseEntity<Map<String, String>> logout(@RequestHeader("Authorization") String authHeader) {
         Map<String, String> response = new HashMap<>();

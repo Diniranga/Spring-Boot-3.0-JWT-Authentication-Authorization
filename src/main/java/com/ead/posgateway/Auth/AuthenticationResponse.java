@@ -16,4 +16,5 @@ public class AuthenticationResponse {
     private String userEmail;
     private String userRole;
     private String message;
+    private boolean twoFactorRequired;
 }

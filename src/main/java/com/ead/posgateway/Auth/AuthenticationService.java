@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -21,6 +22,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.security.SecureRandom;
 
 @Service
 @RequiredArgsConstructor
@@ -34,8 +36,13 @@ public class AuthenticationService {
     private final UserDetailsService userDetailsService;
     private final TokenRepository tokenRepository;
 
+    @Value("${security.enable-2fa:true}")
+    private boolean enable2fa;
+
     private static final int MAX_FAILED_ATTEMPTS = 5;
     private static final long LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+    private static final long TWO_FA_CODE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+    private static final SecureRandom random = new SecureRandom();
 
     public AuthenticationResponse register(RegisterRequest request) {
         var user = User.builder()
@@ -83,6 +90,22 @@ public class AuthenticationService {
             user.setFailedLoginAttempts(0);
             user.setAccountLockedUntil(null);
             userRepository.save(user);
+
+            // 2FA logic
+            if (enable2fa && user.isTwoFactorEnabled()) {
+                String code = generate2faCode();
+                user.setTwoFactorCode(code);
+                user.setTwoFactorCodeExpiry(System.currentTimeMillis() + TWO_FA_CODE_EXPIRY_MS);
+                userRepository.save(user);
+                send2faCode(user.getEmail(), code);
+                return AuthenticationResponse.builder()
+                        .userEmail(user.getEmail())
+                        .userRole(user.getRole().name())
+                        .message("2FA code sent to your email. Please verify to complete login.")
+                        .twoFactorRequired(true)
+                        .build();
+            }
+
             log.info("User authenticated successfully: {} with authorities: {}", 
                     request.getEmail(), 
                     authentication.getAuthorities());
@@ -96,6 +119,7 @@ public class AuthenticationService {
                     .userEmail(user.getEmail())
                     .userRole(user.getRole().name())
                     .message("Login successful")
+                    .twoFactorRequired(false)
                     .build();
         } catch (org.springframework.security.core.AuthenticationException ex) {
             // Increment failed attempts
@@ -107,6 +131,48 @@ public class AuthenticationService {
             userRepository.save(user);
             throw ex;
         }
+    }
+
+    public AuthenticationResponse verify2faCode(String email, String code) {
+        var user = userRepository.findByEmailIgnoreCase(email)
+                .orElseThrow(() -> new org.springframework.security.authentication.BadCredentialsException("Invalid email or code"));
+        if (!enable2fa || !user.isTwoFactorEnabled()) {
+            throw new IllegalStateException("2FA is not enabled for this user");
+        }
+        if (user.getTwoFactorCode() == null || user.getTwoFactorCodeExpiry() == null
+                || user.getTwoFactorCodeExpiry() < System.currentTimeMillis()) {
+            throw new org.springframework.security.authentication.BadCredentialsException("2FA code expired or not set");
+        }
+        if (!user.getTwoFactorCode().equals(code)) {
+            throw new org.springframework.security.authentication.BadCredentialsException("Invalid 2FA code");
+        }
+        // Clear 2FA code after successful verification
+        user.setTwoFactorCode(null);
+        user.setTwoFactorCodeExpiry(null);
+        userRepository.save(user);
+        var jwtToken = jwtService.generateToken(user);
+        var refreshToken = jwtService.generateRefreshToken(user);
+        saveUserToken(user, jwtToken);
+        saveRefreshToken(user, refreshToken);
+        return AuthenticationResponse.builder()
+                .accessToken(jwtToken)
+                .refreshToken(refreshToken)
+                .userEmail(user.getEmail())
+                .userRole(user.getRole().name())
+                .message("2FA verification successful. Login complete.")
+                .twoFactorRequired(false)
+                .build();
+    }
+
+    private String generate2faCode() {
+        int code = 100000 + random.nextInt(900000);
+        return String.valueOf(code);
+    }
+
+    private void send2faCode(String email, String code) {
+        // Dummy email sender: log the code
+        log.info("2FA code for {}: {}", email, code);
+        // In production, integrate with an email service provider
     }
 
     private void saveUserToken(User user, String jwtToken) {
