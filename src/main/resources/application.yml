@@ -27,10 +27,10 @@ spring:
         hsts-max-age: 31536000 # 1 year
 
 server:
-  port: 8443
-  ssl:
-    enabled: true
-    key-store: classpath:keystore.p12
-    key-store-password: password
-    key-store-type: PKCS12
-    key-alias: springboot
+  port: 8080
+#  ssl:
+#    enabled: true
+#    key-store: classpath:keystore.p12
+#    key-store-password: password
+#    key-store-type: PKCS12
+#    key-alias: springboot
