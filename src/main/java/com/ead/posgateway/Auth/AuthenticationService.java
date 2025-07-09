@@ -1,6 +1,7 @@
 package com.ead.posgateway.Auth;
 
 import com.ead.posgateway.Config.JwtService;
+import com.ead.posgateway.Config.SecurityMonitoringService;
 import com.ead.posgateway.User.User;
 import com.ead.posgateway.User.UserRepository;
 import com.ead.posgateway.token.Token;
@@ -35,6 +36,7 @@ public class AuthenticationService {
     private final AuthenticationManager authenticationManager;
     private final UserDetailsService userDetailsService;
     private final TokenRepository tokenRepository;
+    private final SecurityMonitoringService securityMonitoringService;
 
     @Value("${security.enable-2fa:true}")
     private boolean enable2fa;
@@ -69,12 +71,14 @@ public class AuthenticationService {
         var userOpt = userRepository.findByEmailIgnoreCase(request.getEmail());
         if (userOpt.isEmpty()) {
             // Simulate authentication failure for non-existent user
+            securityMonitoringService.logFailedLogin(request.getEmail(), "unknown", "User not found");
             throw new org.springframework.security.authentication.BadCredentialsException("Invalid credentials");
         }
         var user = userOpt.get();
         // Check if account is locked
         if (user.getAccountLockedUntil() != null && user.getAccountLockedUntil() > System.currentTimeMillis()) {
             long minutesLeft = (user.getAccountLockedUntil() - System.currentTimeMillis()) / 60000 + 1;
+            securityMonitoringService.logFailedLogin(user.getEmail(), "unknown", "Account locked");
             throw new org.springframework.security.authentication.LockedException(
                 "Account is locked. Try again in " + minutesLeft + " minutes.");
         }
@@ -98,6 +102,7 @@ public class AuthenticationService {
                 user.setTwoFactorCodeExpiry(System.currentTimeMillis() + TWO_FA_CODE_EXPIRY_MS);
                 userRepository.save(user);
                 send2faCode(user.getEmail(), code);
+                securityMonitoringService.logSuccessfulLogin(user.getEmail(), "unknown");
                 return AuthenticationResponse.builder()
                         .userEmail(user.getEmail())
                         .userRole(user.getRole().name())
@@ -109,6 +114,7 @@ public class AuthenticationService {
             log.info("User authenticated successfully: {} with authorities: {}", 
                     request.getEmail(), 
                     authentication.getAuthorities());
+            securityMonitoringService.logSuccessfulLogin(user.getEmail(), "unknown");
             var jwtToken = jwtService.generateToken(user);
             var refreshToken = jwtService.generateRefreshToken(user);
             saveUserToken(user,jwtToken);
@@ -127,8 +133,10 @@ public class AuthenticationService {
             user.setFailedLoginAttempts(attempts);
             if (attempts >= MAX_FAILED_ATTEMPTS) {
                 user.setAccountLockedUntil(System.currentTimeMillis() + LOCKOUT_DURATION_MS);
+                securityMonitoringService.logAccountLockout(user.getEmail(), "unknown", LOCKOUT_DURATION_MS);
             }
             userRepository.save(user);
+            securityMonitoringService.logFailedLogin(user.getEmail(), "unknown", ex.getMessage());
             throw ex;
         }
     }

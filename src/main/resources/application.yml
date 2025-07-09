@@ -24,3 +24,4 @@ spring:
         audience: pos-gateway-client
       enforce-https: true
       enable-2fa: true
+      enable-logging: true

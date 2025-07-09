@@ -1,5 +1,6 @@
 package com.ead.posgateway.Config;
 
+import com.ead.posgateway.Config.SecurityMonitoringService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,9 +22,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private final Map<String, AtomicInteger> requestCounts = new ConcurrentHashMap<>();
     private final Map<String, Long> lastResetTime = new ConcurrentHashMap<>();
+    private final SecurityMonitoringService securityMonitoringService;
     
     private static final int MAX_REQUESTS_PER_MINUTE = 10;
     private static final long RESET_INTERVAL = 60000; // 1 minute
+
+    public RateLimitFilter(SecurityMonitoringService securityMonitoringService) {
+        this.securityMonitoringService = securityMonitoringService;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, 
@@ -37,6 +43,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (requestURI.startsWith("/auth/") && !requestURI.equals("/auth/refresh-token")) {
             if (isRateLimited(clientIp)) {
                 log.warn("Rate limit exceeded for IP: {} on endpoint: {}", clientIp, requestURI);
+                securityMonitoringService.logRateLimitViolation(clientIp, requestURI);
                 response.setStatus(429); // Too Many Requests
                 response.getWriter().write("Rate limit exceeded. Please try again later.");
                 return;
