@@ -18,32 +18,32 @@ public class PosGatewayApplication {
         SpringApplication.run(PosGatewayApplication.class, args);
     }
     
-    @Bean
-    public CommandLineRunner commandLineRunner(
-            AuthenticationService service
-    ) {
-        return args -> {
-            var admin = RegisterRequest.builder()
-                    .firstName("admin")
-                    .lastName("Admin")
-                    .email("admin@gmail.com")
-                    .password("root")
-                    .role(ADMIN)
-                    .build();
+    // @Bean
+    // public CommandLineRunner commandLineRunner(
+    //         AuthenticationService service
+    // ) {
+    //     return args -> {
+    //         var admin = RegisterRequest.builder()
+    //                 .firstName("admin")
+    //                 .lastName("Admin")
+    //                 .email("admin@gmail.com")
+    //                 .password("root")
+    //                 .role(ADMIN)
+    //                 .build();
 
-            var user = RegisterRequest.builder()
-                    .firstName("user")
-                    .lastName("user")
-                    .email("user@gmail.com")
-                    .password("root")
-                    .role(USER)
-                    .build();
+    //         var user = RegisterRequest.builder()
+    //                 .firstName("user")
+    //                 .lastName("user")
+    //                 .email("user@gmail.com")
+    //                 .password("root")
+    //                 .role(USER)
+    //                 .build();
 
-            System.out.println("Admin token: "+ service.register(admin).getAccessToken());
-            System.out.println("User token: "+ service.register(user).getAccessToken());
+    //         System.out.println("Admin token: "+ service.register(admin).getAccessToken());
+    //         System.out.println("User token: "+ service.register(user).getAccessToken());
 
-        };
+    //     };
 
-    }
+    // }
 
 }

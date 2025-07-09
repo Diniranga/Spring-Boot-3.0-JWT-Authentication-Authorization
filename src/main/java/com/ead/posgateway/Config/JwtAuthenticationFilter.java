@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -19,6 +20,7 @@ import java.io.IOException;
 
 @Component
 @RequiredArgsConstructor
+@Order(2)
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
@@ -31,33 +33,37 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull HttpServletResponse response,
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
-        final String authHeader = request.getHeader("Authorization");
-        final String jwtToken;
-        final String userEmail;
-        if(authHeader == null || !authHeader.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response);
-            return;
-        } else {
+        try {
+            final String authHeader = request.getHeader("Authorization");
+            final String jwtToken;
+            final String userEmail;
+            
+            if(authHeader == null || !authHeader.startsWith("Bearer ")) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+            
             jwtToken = authHeader.substring(7);
             userEmail = jwtService.extractUserEmail(jwtToken);
+            
             if(userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null){
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
                 var isTokenValid = tokenRepository.findByToken(jwtToken)
                         .map(t -> !t.isExpired() && !t.isRevoked())
                         .orElse(false);
+                        
                 if(jwtService.isTokenValid(jwtToken,userDetails) && isTokenValid){
-                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                            userDetails,
-                            null,
-                            userDetails.getAuthorities()
-                    );
-                    authToken.setDetails(
-                            new WebAuthenticationDetailsSource().buildDetails(request)
-                    );
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                    // Best Practice: Use utility class for setting security context
+                    SecurityContextUtils.setSecurityContext(userDetails, jwtToken, request);
+                    System.out.println("Security context set for user: " + userEmail);
                 }
             }
             filterChain.doFilter(request,response);
+        } catch (Exception e) {
+            // Best Practice: Clear security context on error
+            SecurityContextUtils.clearSecurityContext();
+            System.err.println("Error in JWT filter: " + e.getMessage());
+            filterChain.doFilter(request, response);
         }
     }
 }

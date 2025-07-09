@@ -6,7 +6,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
     show-sql: true
     properties:
       format_sql: true
@@ -20,3 +20,4 @@ spring:
         expiration: 86400000
         refresh-token:
           expiration: 604800000 #7 days
+      enforce-https: true
