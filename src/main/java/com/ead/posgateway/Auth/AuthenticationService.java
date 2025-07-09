@@ -21,6 +21,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -45,7 +46,8 @@ public class AuthenticationService {
         var savedUser = userRepository.save(user);
         var jwtToken = jwtService.generateToken(user);
         var refreshToken = jwtService.generateRefreshToken(user);
-        saveUserToken(savedUser, jwtToken);
+        saveUserToken(savedUser, jwtToken, TokenType.BEARER);
+        saveUserToken(savedUser, refreshToken, TokenType.REFRESH);
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
                 .refreshToken(refreshToken)
@@ -72,7 +74,8 @@ public class AuthenticationService {
                 .orElseThrow();
         var jwtToken = jwtService.generateToken(user);
         var refreshToken = jwtService.generateRefreshToken(user);
-        saveUserToken(user,jwtToken);
+        saveUserToken(user, jwtToken, TokenType.BEARER);
+        saveUserToken(user, refreshToken, TokenType.REFRESH);
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
                 .refreshToken(refreshToken)
@@ -82,27 +85,37 @@ public class AuthenticationService {
                 .build();
     }
 
-    private void saveUserToken(User user, String jwtToken) {
-        revokeAllUserTokens(user);
+    private void saveUserToken(User user, String tokenValue, TokenType tokenType) {
+        // Only revoke tokens of the same type
+        revokeUserTokensByType(user, tokenType);
         var token = Token.builder()
                 .user(user)
-                .token(jwtToken)
-                .tokenType(TokenType.BEARER)
+                .token(tokenValue)
+                .tokenType(tokenType)
                 .expired(false)
                 .revoked(false)
                 .build();
         tokenRepository.save(token);
     }
 
-    private void revokeAllUserTokens(User user) {
+    private void revokeUserTokensByType(User user, TokenType tokenType) {
         var validTokens = tokenRepository.findAllValidTokenByUser(user.getId());
-        if(validTokens.isEmpty())
-            return;
-        validTokens.forEach(t -> {
-            t.setExpired(true);
-            t.setRevoked(true);
-        });
+        validTokens.stream()
+                .filter(t -> t.getTokenType() == tokenType && !t.isExpired() && !t.isRevoked())
+                .forEach(t -> {
+                    t.setExpired(true);
+                    t.setRevoked(true);
+                });
         tokenRepository.saveAll(validTokens);
+    }
+
+    private void revokeToken(String tokenValue) {
+        Optional<Token> tokenOpt = tokenRepository.findByToken(tokenValue);
+        tokenOpt.ifPresent(token -> {
+            token.setExpired(true);
+            token.setRevoked(true);
+            tokenRepository.save(token);
+        });
     }
 
     public boolean validateToken(String token, String userEmail) {
@@ -115,22 +128,27 @@ public class AuthenticationService {
             HttpServletResponse response
     ) throws IOException {
         final String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
-        final String refreshToken;
+        final String oldRefreshToken;
         final String userEmail;
         if(authHeader == null || !authHeader.startsWith("Bearer ")) {
             return;
         } else {
-            refreshToken = authHeader.substring(7);
-            userEmail = jwtService.extractUserEmail(refreshToken);
+            oldRefreshToken = authHeader.substring(7);
+            userEmail = jwtService.extractUserEmail(oldRefreshToken);
             if (userEmail != null) {
                 var user = this.userRepository.findByEmail(userEmail).orElseThrow();
-                if (jwtService.isTokenValid(refreshToken, user)) {
+                // Validate old refresh token
+                if (jwtService.isTokenValid(oldRefreshToken, user)) {
+                    // Revoke the old refresh token
+                    revokeToken(oldRefreshToken);
+                    // Issue new tokens
                     var accessToken = jwtService.generateToken(user);
-                    revokeAllUserTokens(user);
-                    saveUserToken(user, accessToken);
+                    var newRefreshToken = jwtService.generateRefreshToken(user);
+                    saveUserToken(user, accessToken, TokenType.BEARER);
+                    saveUserToken(user, newRefreshToken, TokenType.REFRESH);
                     var authResponse = AuthenticationResponse.builder()
                             .accessToken(accessToken)
-                            .refreshToken(refreshToken)
+                            .refreshToken(newRefreshToken)
                             .build();
                     new ObjectMapper().writeValue(response.getOutputStream(), authResponse);
                 }
