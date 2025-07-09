@@ -34,6 +34,9 @@ public class AuthenticationService {
     private final UserDetailsService userDetailsService;
     private final TokenRepository tokenRepository;
 
+    private static final int MAX_FAILED_ATTEMPTS = 5;
+    private static final long LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
     public AuthenticationResponse register(RegisterRequest request) {
         var user = User.builder()
                 .firstName(request.getFirstName())
@@ -56,31 +59,54 @@ public class AuthenticationService {
     }
 
     public AuthenticationResponse authenticate(AuthenticationRequest request) {
-        // Authenticate the user
-        var authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.getEmail(),
-                        request.getPassword()
-                )
-        );
-        
-        log.info("User authenticated successfully: {} with authorities: {}", 
-                request.getEmail(), 
-                authentication.getAuthorities());
-        
-        var user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow();
-        var jwtToken = jwtService.generateToken(user);
-        var refreshToken = jwtService.generateRefreshToken(user);
-        saveUserToken(user,jwtToken);
-        saveRefreshToken(user, refreshToken);
-        return AuthenticationResponse.builder()
-                .accessToken(jwtToken)
-                .refreshToken(refreshToken)
-                .userEmail(user.getEmail())
-                .userRole(user.getRole().name())
-                .message("Login successful")
-                .build();
+        var userOpt = userRepository.findByEmailIgnoreCase(request.getEmail());
+        if (userOpt.isEmpty()) {
+            // Simulate authentication failure for non-existent user
+            throw new org.springframework.security.authentication.BadCredentialsException("Invalid credentials");
+        }
+        var user = userOpt.get();
+        // Check if account is locked
+        if (user.getAccountLockedUntil() != null && user.getAccountLockedUntil() > System.currentTimeMillis()) {
+            long minutesLeft = (user.getAccountLockedUntil() - System.currentTimeMillis()) / 60000 + 1;
+            throw new org.springframework.security.authentication.LockedException(
+                "Account is locked. Try again in " + minutesLeft + " minutes.");
+        }
+        try {
+            // Authenticate the user
+            var authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.getEmail(),
+                            request.getPassword()
+                    )
+            );
+            // Reset failed attempts on success
+            user.setFailedLoginAttempts(0);
+            user.setAccountLockedUntil(null);
+            userRepository.save(user);
+            log.info("User authenticated successfully: {} with authorities: {}", 
+                    request.getEmail(), 
+                    authentication.getAuthorities());
+            var jwtToken = jwtService.generateToken(user);
+            var refreshToken = jwtService.generateRefreshToken(user);
+            saveUserToken(user,jwtToken);
+            saveRefreshToken(user, refreshToken);
+            return AuthenticationResponse.builder()
+                    .accessToken(jwtToken)
+                    .refreshToken(refreshToken)
+                    .userEmail(user.getEmail())
+                    .userRole(user.getRole().name())
+                    .message("Login successful")
+                    .build();
+        } catch (org.springframework.security.core.AuthenticationException ex) {
+            // Increment failed attempts
+            int attempts = user.getFailedLoginAttempts() + 1;
+            user.setFailedLoginAttempts(attempts);
+            if (attempts >= MAX_FAILED_ATTEMPTS) {
+                user.setAccountLockedUntil(System.currentTimeMillis() + LOCKOUT_DURATION_MS);
+            }
+            userRepository.save(user);
+            throw ex;
+        }
     }
 
     private void saveUserToken(User user, String jwtToken) {

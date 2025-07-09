@@ -34,6 +34,9 @@ public class User implements UserDetails {
     @OneToMany(mappedBy = "user")
     private List<Token> tokens;
 
+    private int failedLoginAttempts;
+    private Long accountLockedUntil;
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return role.getUserAuthorities();
