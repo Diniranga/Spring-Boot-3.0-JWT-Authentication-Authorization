@@ -20,4 +20,6 @@ spring:
         expiration: 86400000
         refresh-token:
           expiration: 604800000 #7 days
+        issuer: pos-gateway
+        audience: pos-gateway-client
       enforce-https: true
