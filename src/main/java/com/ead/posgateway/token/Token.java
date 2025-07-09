@@ -17,7 +17,11 @@ public class Token {
     @Id
     @GeneratedValue
     private Integer id;
+
+    @Lob
+    @Column(columnDefinition = "TEXT")
     private String token;
+
     @Enumerated(EnumType.STRING)
     private TokenType tokenType = TokenType.BEARER;
     private boolean expired;

@@ -13,6 +13,7 @@ import java.security.Key;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 @Service
@@ -27,12 +28,17 @@ public class JwtService {
     @Value("${spring.application.security.jwt.refresh-token.expiration}")
     private long refreshExpiration;
 
+    @Value("${spring.application.security.jwt.audience}")
+    private String jwtAudience;
+
+    @Value("${spring.application.security.jwt.issuer}")
+    private String jwtIssuer;
+
     public String extractUserEmail(String jwtToken) {
         return extractClaim(jwtToken, Claims::getSubject);
     }
 
     public String generateToken(UserDetails userDetails){
-
         return generateToken(new HashMap<>(),userDetails);
     }
 
@@ -54,12 +60,16 @@ public class JwtService {
             UserDetails userDetails,
             long expiration
     ){
+        long now = System.currentTimeMillis();
         return Jwts
                 .builder()
                 .setClaims(extraClaims)
                 .setSubject(userDetails.getUsername())
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + expiration))
+                .setAudience(jwtAudience)
+                .setIssuer(jwtIssuer)
+                .setIssuedAt(new Date(now))
+                .setExpiration(new Date(now + expiration))
+                .setId(UUID.randomUUID().toString())
                 .signWith(getSignInKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
@@ -73,11 +83,32 @@ public class JwtService {
     }
 
     public boolean isTokenValid(String jwtToken,UserDetails userDetails){
-        final String userName = extractUserEmail(jwtToken);
-        if(userName == null){
+        final Claims claims = extractAllClaims(jwtToken);
+        if (claims == null) return false;
+        final String userName = claims.getSubject();
+        if(userName == null || !userName.equals(userDetails.getUsername())){
             return false;
         }
-        return (userName.equals(userDetails.getUsername())) && !isTokenExpired(jwtToken);
+        if (isTokenExpired(jwtToken)) {
+            return false;
+        }
+        // Validate audience
+        if (!jwtAudience.equals(claims.getAudience())) {
+            return false;
+        }
+        // Validate issuer
+        if (!jwtIssuer.equals(claims.getIssuer())) {
+            return false;
+        }
+        // Validate issued at
+        if (claims.getIssuedAt() == null) {
+            return false;
+        }
+        // Validate JWT ID
+        if (claims.getId() == null || claims.getId().isEmpty()) {
+            return false;
+        }
+        return true;
     }
 
     private boolean isTokenExpired(String jwtToken) {
@@ -100,7 +131,6 @@ public class JwtService {
             return null;
         }
     }
-
 
     private Key getSignInKey() {
         byte[] keyBytes = Decoders.BASE64.decode(SECRET_KEY);
