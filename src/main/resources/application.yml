@@ -1,4 +1,9 @@
 spring:
+  web:
+    resources:
+      static-locations: classpath:/static/
+  mvc:
+    static-path-pattern: /**
   datasource:
     url: jdbc:mysql://localhost:3306/jwtSecurity
     username: root
@@ -22,7 +27,7 @@ spring:
           expiration: 604800000 #7 days
         issuer: pos-gateway
         audience: pos-gateway-client
-      enforce-https: true
+      enforce-https: false
       enable-2fa: true
       enable-logging: true
   logging:

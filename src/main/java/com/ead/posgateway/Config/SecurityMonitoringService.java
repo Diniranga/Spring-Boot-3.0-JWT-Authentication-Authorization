@@ -16,19 +16,19 @@ public class SecurityMonitoringService {
     private final Map<String, AtomicInteger> failedLoginCounts = new ConcurrentHashMap<>();
     private final Map<String, AtomicInteger> rateLimitViolations = new ConcurrentHashMap<>();
 
-    @Value("${security.enable-logging:true}")
+    @Value("${spring.application.security.enable-logging}")
     private boolean enableLogging;
-    @Value("${security.logging.failed-logins:true}")
+    @Value("${spring.logging.failed-logins}")
     private boolean logFailedLogins;
-    @Value("${security.logging.successful-logins:true}")
+    @Value("${spring.logging.successful-logins}")
     private boolean logSuccessfulLogins;
-    @Value("${security.logging.account-lockout:true}")
+    @Value("${spring.logging.account-lockout}")
     private boolean logAccountLockout;
-    @Value("${security.logging.rate-limit:true}")
+    @Value("${spring.logging.rate-limit}")
     private boolean logRateLimit;
-    @Value("${security.logging.token-revocation:true}")
+    @Value("${spring.logging.token-revocation}")
     private boolean logTokenRevocation;
-    @Value("${security.logging.suspicious-activity:true}")
+    @Value("${spring.logging.suspicious-activity}")
     private boolean logSuspiciousActivity;
 
     public void logFailedLogin(String email, String ipAddress, String reason) {

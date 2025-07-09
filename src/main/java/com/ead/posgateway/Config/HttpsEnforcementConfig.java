@@ -16,7 +16,7 @@ import java.io.IOException;
 @Order(0)
 public class HttpsEnforcementConfig extends OncePerRequestFilter {
 
-    @Value("${security.enforce-https:true}")
+    @Value("${spring.application.security.enforce-https}")
     private boolean enforceHttps;
 
     @Override

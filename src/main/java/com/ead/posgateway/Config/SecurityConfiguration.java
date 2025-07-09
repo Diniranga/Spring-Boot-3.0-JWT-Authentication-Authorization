@@ -23,7 +23,10 @@ import static org.springframework.http.HttpMethod.*;
 public class SecurityConfiguration {
 
     private final AuthenticationProvider authenticationProvider;
-
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitFilter rateLimitFilter;
+    private final SecurityHeadersFilter securityHeadersFilter;
+    private final HttpsEnforcementConfig httpsEnforcementConfig;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -34,6 +37,7 @@ public class SecurityConfiguration {
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers("/test/public").permitAll()
                 .requestMatchers("/test/test-rate-limit").permitAll()
+                .requestMatchers("/", "/index.html", "/static/**", "/*.html", "/*.css", "/*.js").permitAll()
 
                 .requestMatchers("/demo/**").hasAnyRole(ADMIN.name(), USER.name())
 
@@ -46,7 +50,11 @@ public class SecurityConfiguration {
                     .sessionManagement()
                     .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 .and()
-                .authenticationProvider(authenticationProvider);
+                .authenticationProvider(authenticationProvider)
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(securityHeadersFilter, RateLimitFilter.class)
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        
         return http.build();
     }
 }
