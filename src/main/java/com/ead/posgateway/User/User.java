@@ -19,34 +19,43 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
+@Table(name = "users")
 public class User implements UserDetails {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
+    
+    @Column(nullable = false)
     private String firstName;
+    
+    @Column(nullable = false)
     private String lastName;
+    
+    @Column(unique = true, nullable = false)
     private String email;
+    
+    @Column(nullable = false)
     private String password;
 
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private Role role;
 
-    @OneToMany(mappedBy = "user")
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Token> tokens;
 
-    // Account lockout fields
+    // Account security fields
     private int failedLoginAttempts;
     private boolean accountLocked;
     private LocalDateTime lockTime;
+    private LocalDateTime lastPasswordChange;
 
     // Session management fields
     private int activeSessions;
     private int maxConcurrentSessions;
-    private LocalDateTime lastPasswordChange;
-    private String lastLoginIp;
-    private String lastLoginUserAgent;
     private LocalDateTime lastLoginTime;
+    private String lastLoginIp;
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
