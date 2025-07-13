@@ -2,6 +2,7 @@ package com.ead.posgateway.Config;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -71,5 +72,18 @@ public class SecurityContextUtils {
     public static String getCurrentUserEmail() {
         Authentication authentication = getCurrentAuthentication();
         return authentication != null ? authentication.getName() : null;
+    }
+
+    /**
+     * Best Practice: Check if current user has specific authority
+     */
+    public static boolean hasAuthority(String authority) {
+        Authentication authentication = getCurrentAuthentication();
+        if (authentication != null && authentication.getAuthorities() != null) {
+            return authentication.getAuthorities().stream()
+                    .map(GrantedAuthority::getAuthority)
+                    .anyMatch(auth -> auth.equals(authority));
+        }
+        return false;
     }
 } 

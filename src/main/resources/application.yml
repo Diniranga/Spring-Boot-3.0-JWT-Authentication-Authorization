@@ -30,6 +30,10 @@ spring:
       lockout:
         max-failed-attempts: 5
         cooldown-minutes: 15
+      session:
+        max-concurrent-sessions: 3
+        session-timeout-minutes: 30
+        cleanup-interval-minutes: 5
 
 server:
   port: 8080

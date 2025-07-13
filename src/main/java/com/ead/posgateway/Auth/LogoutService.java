@@ -3,7 +3,6 @@ package com.ead.posgateway.Auth;
 import com.ead.posgateway.Config.SecurityContextUtils;
 import com.ead.posgateway.User.User;
 import com.ead.posgateway.User.UserRepository;
-import com.ead.posgateway.token.TokenRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -13,22 +12,18 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class LogoutService {
 
-    private final TokenRepository tokenRepository;
+    private final SessionManagementService sessionManagementService;
     private final UserRepository userRepository;
 
     public void logout(String token) {
         try {
-            // Revoke the specific token
-            tokenRepository.findByToken(token)
-                    .ifPresent(tokenEntity -> {
-                        tokenEntity.setExpired(true);
-                        tokenEntity.setRevoked(true);
-                        tokenRepository.save(tokenEntity);
-                        log.info("Token revoked for user: {}", tokenEntity.getUser().getEmail());
-                    });
+            // Invalidate the specific session
+            sessionManagementService.invalidateSession(token);
 
             // Clear security context
             SecurityContextUtils.clearSecurityContext();
+            
+            log.info("User logged out successfully");
             
         } catch (Exception e) {
             log.error("Error during logout: {}", e.getMessage());
@@ -41,15 +36,10 @@ public class LogoutService {
             User user = userRepository.findByEmail(userEmail)
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
-            // Revoke all tokens for the user
-            var validTokens = tokenRepository.findAllValidTokenByUser(user.getId());
-            validTokens.forEach(token -> {
-                token.setExpired(true);
-                token.setRevoked(true);
-            });
-            tokenRepository.saveAll(validTokens);
+            // Invalidate all sessions for the user
+            sessionManagementService.invalidateAllSessions(user);
 
-            log.info("All sessions revoked for user: {}", userEmail);
+            log.info("All sessions logged out for user: {}", userEmail);
             
         } catch (Exception e) {
             log.error("Error during logout all sessions: {}", e.getMessage());

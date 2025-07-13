@@ -38,13 +38,14 @@ public class AuthenticationService {
     private final AuthenticationManager authenticationManager;
     private final UserDetailsService userDetailsService;
     private final TokenRepository tokenRepository;
+    private final SessionManagementService sessionManagementService;
 
     @Value("${spring.application.security.lockout.max-failed-attempts:5}")
     private int maxFailedAttempts;
     @Value("${spring.application.security.lockout.cooldown-minutes:15}")
     private int cooldownMinutes;
 
-    public AuthenticationResponse register(RegisterRequest request) {
+    public AuthenticationResponse register(RegisterRequest request, HttpServletRequest httpRequest) {
         var user = User.builder()
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
@@ -54,12 +55,17 @@ public class AuthenticationService {
                 .failedLoginAttempts(0)
                 .accountLocked(false)
                 .lockTime(null)
+                .activeSessions(0)
+                .maxConcurrentSessions(3)
+                .lastPasswordChange(LocalDateTime.now())
                 .build();
         var savedUser = userRepository.save(user);
         var jwtToken = jwtService.generateToken(user);
         var refreshToken = jwtService.generateRefreshToken(user);
-        saveUserToken(savedUser, jwtToken, TokenType.BEARER);
-        saveUserToken(savedUser, refreshToken, TokenType.REFRESH);
+        
+        // Create single session with both tokens
+        sessionManagementService.createSession(savedUser, jwtToken, refreshToken, httpRequest);
+        
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
                 .refreshToken(refreshToken)
@@ -69,7 +75,7 @@ public class AuthenticationService {
                 .build();
     }
 
-    public AuthenticationResponse authenticate(AuthenticationRequest request) {
+    public AuthenticationResponse authenticate(AuthenticationRequest request, HttpServletRequest httpRequest) {
         var userOpt = userRepository.findByEmail(request.getEmail());
         if (userOpt.isEmpty()) {
             throw new BadCredentialsException("Invalid email or password");
@@ -129,8 +135,10 @@ public class AuthenticationService {
 
         var jwtToken = jwtService.generateToken(user);
         var refreshToken = jwtService.generateRefreshToken(user);
-        saveUserToken(user, jwtToken, TokenType.BEARER);
-        saveUserToken(user, refreshToken, TokenType.REFRESH);
+        
+        // Create single session with both tokens
+        sessionManagementService.createSession(user, jwtToken, refreshToken, httpRequest);
+        
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
                 .refreshToken(refreshToken)
@@ -140,42 +148,14 @@ public class AuthenticationService {
                 .build();
     }
 
-    private void saveUserToken(User user, String tokenValue, TokenType tokenType) {
-        // Only revoke tokens of the same type
-        revokeUserTokensByType(user, tokenType);
-        var token = Token.builder()
-                .user(user)
-                .token(tokenValue)
-                .tokenType(tokenType)
-                .expired(false)
-                .revoked(false)
-                .build();
-        tokenRepository.save(token);
-    }
-
-    private void revokeUserTokensByType(User user, TokenType tokenType) {
-        var validTokens = tokenRepository.findAllValidTokenByUser(user.getId());
-        validTokens.stream()
-                .filter(t -> t.getTokenType() == tokenType && !t.isExpired() && !t.isRevoked())
-                .forEach(t -> {
-                    t.setExpired(true);
-                    t.setRevoked(true);
-                });
-        tokenRepository.saveAll(validTokens);
-    }
-
-    private void revokeToken(String tokenValue) {
-        Optional<Token> tokenOpt = tokenRepository.findByToken(tokenValue);
-        tokenOpt.ifPresent(token -> {
-            token.setExpired(true);
-            token.setRevoked(true);
-            tokenRepository.save(token);
-        });
-    }
-
-    public boolean validateToken(String token, String userEmail) {
+    public boolean validateToken(String token, String userEmail, HttpServletRequest request) {
+        // First validate session
+        if (!sessionManagementService.validateSession(token, request)) {
+            return false;
+        }
+        
         UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
-        return jwtService.isTokenValid(token,userDetails);
+        return jwtService.isTokenValid(token, userDetails);
     }
 
     public void refreshToken(
@@ -193,14 +173,17 @@ public class AuthenticationService {
             if (userEmail != null) {
                 var user = this.userRepository.findByEmail(userEmail).orElseThrow();
                 // Validate old refresh token
-                if (jwtService.isTokenValid(oldRefreshToken, user)) {
-                    // Revoke the old refresh token
-                    revokeToken(oldRefreshToken);
+                if (jwtService.isTokenValid(oldRefreshToken, user) && 
+                    sessionManagementService.validateSession(oldRefreshToken, request)) {
+                    // Revoke the old session
+                    sessionManagementService.invalidateSession(oldRefreshToken);
                     // Issue new tokens
                     var accessToken = jwtService.generateToken(user);
                     var newRefreshToken = jwtService.generateRefreshToken(user);
-                    saveUserToken(user, accessToken, TokenType.BEARER);
-                    saveUserToken(user, newRefreshToken, TokenType.REFRESH);
+                    
+                    // Create new session with both tokens
+                    sessionManagementService.createSession(user, accessToken, newRefreshToken, request);
+                    
                     var authResponse = AuthenticationResponse.builder()
                             .accessToken(accessToken)
                             .refreshToken(newRefreshToken)
@@ -209,6 +192,23 @@ public class AuthenticationService {
                 }
             }
         }
+    }
+
+    /**
+     * Change user password and invalidate all sessions
+     */
+    public void changePassword(String userEmail, String newPassword) {
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setLastPasswordChange(LocalDateTime.now());
+        userRepository.save(user);
+        
+        // Invalidate all sessions for security
+        sessionManagementService.invalidateAllSessions(user);
+        
+        log.info("Password changed for user: {}. All sessions invalidated.", userEmail);
     }
 
     /**

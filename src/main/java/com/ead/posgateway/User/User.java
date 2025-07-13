@@ -40,6 +40,14 @@ public class User implements UserDetails {
     private boolean accountLocked;
     private LocalDateTime lockTime;
 
+    // Session management fields
+    private int activeSessions;
+    private int maxConcurrentSessions;
+    private LocalDateTime lastPasswordChange;
+    private String lastLoginIp;
+    private String lastLoginUserAgent;
+    private LocalDateTime lastLoginTime;
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return role.getUserAuthorities();

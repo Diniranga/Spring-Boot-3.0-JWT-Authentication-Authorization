@@ -24,6 +24,9 @@ public class SecurityConfiguration {
 
     private final AuthenticationProvider authenticationProvider;
     private final HttpsConfiguration httpsConfiguration;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitFilter rateLimitFilter;
+    private final SecurityHeadersFilter securityHeadersFilter;
 
 
     @Bean
@@ -48,7 +51,11 @@ public class SecurityConfiguration {
                     .sessionManagement()
                     .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 .and()
-                .authenticationProvider(authenticationProvider);
+                .authenticationProvider(authenticationProvider)
+                // Add filters in order (SecurityHeadersFilter -> RateLimitFilter -> JwtAuthenticationFilter)
+                .addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         // Configure HTTPS enforcement if enabled
         if (httpsConfiguration.isEnabled()) {

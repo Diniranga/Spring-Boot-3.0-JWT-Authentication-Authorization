@@ -1,5 +1,6 @@
 package com.ead.posgateway.Config;
 
+import com.ead.posgateway.Auth.SessionManagementService;
 import com.ead.posgateway.token.TokenRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -26,6 +27,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
     private final TokenRepository tokenRepository;
+    private final SessionManagementService sessionManagementService;
 
     @Override
     protected void doFilterInternal(
@@ -48,14 +50,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             
             if(userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null){
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
-                var isTokenValid = tokenRepository.findByToken(jwtToken)
-                        .map(t -> !t.isExpired() && !t.isRevoked())
-                        .orElse(false);
+                
+                // Enhanced session validation with device fingerprinting
+                boolean isSessionValid = sessionManagementService.validateSession(jwtToken, request);
+                boolean isTokenValid = jwtService.isTokenValid(jwtToken, userDetails);
                         
-                if(jwtService.isTokenValid(jwtToken,userDetails) && isTokenValid){
+                if(isTokenValid && isSessionValid){
                     // Best Practice: Use utility class for setting security context
                     SecurityContextUtils.setSecurityContext(userDetails, jwtToken, request);
                     System.out.println("Security context set for user: " + userEmail);
+                } else {
+                    // Log security event for invalid session
+                    System.out.println("Invalid session detected for user: " + userEmail + 
+                                     " - Token valid: " + isTokenValid + 
+                                     " - Session valid: " + isSessionValid);
                 }
             }
             filterChain.doFilter(request,response);
