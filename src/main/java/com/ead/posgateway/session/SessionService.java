@@ -5,6 +5,7 @@ import com.ead.posgateway.User.User;
 import com.ead.posgateway.User.UserRepository;
 import com.ead.posgateway.token.Token;
 import com.ead.posgateway.token.TokenRepository;
+import com.ead.posgateway.service.TokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +26,7 @@ public class SessionService {
     private final UserRepository userRepository;
     private final SecurityMonitoringService securityMonitoringService;
     private final TokenRepository tokenRepository;
+    private final TokenService tokenService;
 
     @Value("${spring.application.security.session.max-concurrent-sessions:3}")
     private int maxConcurrentSessions;
@@ -47,7 +49,9 @@ public class SessionService {
             if (!existingSession.isRevoked() && !existingSession.isExpired()) {
                 existingSession.revoke("New session created from same device", "SYSTEM");
                 userSessionRepository.save(existingSession);
-                log.info("Revoked existing session for user: {} with session ID: {} from IP: {} before creating new session", 
+                // Revoke all tokens for this session
+                tokenService.revokeTokensBySessionId(existingSession.getSessionId());
+                log.info("Revoked existing session and tokens for user: {} with session ID: {} from IP: {} before creating new session", 
                         user.getEmail(), existingSession.getSessionId(), ipAddress);
             }
         }
@@ -346,7 +350,6 @@ public class SessionService {
                 
                 // Also mark the token as revoked
                 tokenEntity.setRevoked(true);
-                tokenEntity.setExpired(true);
                 tokenRepository.save(tokenEntity);
                 
                 log.info("Session and token invalidated for user: {} with session ID: {}", 
@@ -355,7 +358,6 @@ public class SessionService {
                 log.warn("Token found but no session ID associated: {}", token);
                 // Still revoke the token even if no session
                 tokenEntity.setRevoked(true);
-                tokenEntity.setExpired(true);
                 tokenRepository.save(tokenEntity);
             }
         } else {

@@ -48,7 +48,6 @@ public class SessionManagementService {
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .tokenType(TokenType.BEARER)
-                .expired(false)
                 .revoked(false)
                 .sessionId(userSession.getSessionId())
                 .createdAt(LocalDateTime.now())
@@ -92,7 +91,6 @@ public class SessionManagementService {
         Optional<Token> tokenOpt = tokenRepository.findByToken(tokenValue);
         if (tokenOpt.isPresent()) {
             Token token = tokenOpt.get();
-            token.setExpired(true);
             token.setRevoked(true);
             tokenRepository.save(token);
 
@@ -115,7 +113,6 @@ public class SessionManagementService {
         // Invalidate all tokens for the user
         List<Token> userTokens = tokenRepository.findByUser(user);
         userTokens.forEach(token -> {
-            token.setExpired(true);
             token.setRevoked(true);
         });
         tokenRepository.saveAll(userTokens);

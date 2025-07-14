@@ -30,10 +30,10 @@ public class TokenService {
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .tokenType(TokenType.BEARER)
-                .expired(false)
                 .revoked(false)
                 .sessionId(sessionId)
                 .createdAt(LocalDateTime.now())
+                .isActive(true)
                 .build();
 
         Token savedToken = tokenRepository.save(token);
@@ -53,8 +53,8 @@ public class TokenService {
         Optional<Token> tokenOpt = tokenRepository.findByToken(tokenValue);
         if (tokenOpt.isPresent()) {
             Token token = tokenOpt.get();
-            token.setExpired(true);
             token.setRevoked(true);
+            token.setIsActive(false);
             tokenRepository.save(token);
             log.info("Token revoked for user: {}", token.getUser().getEmail());
         }
@@ -63,18 +63,18 @@ public class TokenService {
     public void revokeAllUserTokens(User user) {
         List<Token> userTokens = tokenRepository.findByUser(user);
         userTokens.forEach(token -> {
-            token.setExpired(true);
             token.setRevoked(true);
+            token.setIsActive(false);
         });
         tokenRepository.saveAll(userTokens);
         log.info("All tokens revoked for user: {}", user.getEmail());
     }
 
     public void revokeTokensBySessionId(String sessionId) {
-        List<Token> sessionTokens = tokenRepository.findBySessionIdAndExpiredFalseAndRevokedFalse(sessionId);
+        List<Token> sessionTokens = tokenRepository.findBySessionIdAndRevokedFalse(sessionId);
         sessionTokens.forEach(token -> {
-            token.setExpired(true);
             token.setRevoked(true);
+            token.setIsActive(false);
         });
         tokenRepository.saveAll(sessionTokens);
         log.info("Revoked {} tokens for session: {}", sessionTokens.size(), sessionId);

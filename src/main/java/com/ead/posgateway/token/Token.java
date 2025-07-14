@@ -30,7 +30,6 @@ public class Token {
 
     @Enumerated(EnumType.STRING)
     private TokenType tokenType = TokenType.BEARER;
-    private boolean expired;
     private boolean revoked;
 
     @ManyToOne
@@ -42,6 +41,23 @@ public class Token {
     private String sessionId;
     private boolean isActive;
 
+    private static com.ead.posgateway.Config.JwtService jwtService;
+
+    public static void setJwtService(com.ead.posgateway.Config.JwtService service) {
+        jwtService = service;
+    }
+
+    @Transient
+    public boolean isExpired() {
+        if (accessToken == null || jwtService == null) return false;
+        try {
+            java.util.Date exp = jwtService.extractClaim(accessToken, io.jsonwebtoken.Claims::getExpiration);
+            return exp != null && exp.before(new java.util.Date());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     // Helper methods for backward compatibility
     public String getToken() {
         return accessToken;
@@ -52,10 +68,14 @@ public class Token {
     }
 
     public boolean isAccessTokenValid() {
-        return accessToken != null && !expired && !revoked && isActive;
+        return accessToken != null && !isExpired() && !revoked && isActive;
     }
 
     public boolean isRefreshTokenValid() {
-        return refreshToken != null && !expired && !revoked && isActive;
+        return refreshToken != null && !isExpired() && !revoked && isActive;
+    }
+
+    public void setIsActive(boolean isActive) {
+        this.isActive = isActive;
     }
 }
