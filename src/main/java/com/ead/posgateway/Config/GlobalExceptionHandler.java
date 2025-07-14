@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -77,6 +78,18 @@ public class GlobalExceptionHandler {
         
         log.warn("Invalid argument: {}", ex.getMessage());
         return ResponseEntity.badRequest().body(response);
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<?> handleMissingRequestHeader(MissingRequestHeaderException ex) {
+        String headerName = ex.getHeaderName();
+        String message = "Required request header '" + headerName + "' is missing. Please provide a valid Authorization token.";
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                    "error", "Missing Request Header",
+                    "message", message
+                ));
     }
 
     @ExceptionHandler(Exception.class)
