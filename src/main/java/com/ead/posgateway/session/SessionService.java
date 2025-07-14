@@ -434,15 +434,26 @@ public class SessionService {
      * Generate device fingerprint from request
      */
     private String generateDeviceFingerprint(HttpServletRequest request) {
+        // Use X-Forwarded-For for real client IP if present
+        String clientIp = getClientIpAddress(request);
         String userAgent = request.getHeader("User-Agent");
         String acceptLanguage = request.getHeader("Accept-Language");
         String acceptEncoding = request.getHeader("Accept-Encoding");
-        
-        String fingerprint = String.format("%s|%s|%s", 
+        String fingerprintCookie = null;
+        if (request.getCookies() != null) {
+            for (jakarta.servlet.http.Cookie cookie : request.getCookies()) {
+                if ("device_fp".equals(cookie.getName())) {
+                    fingerprintCookie = cookie.getValue();
+                    break;
+                }
+            }
+        }
+        String fingerprint = String.format("%s|%s|%s|%s|%s",
+                clientIp != null ? clientIp : "",
                 userAgent != null ? userAgent : "",
                 acceptLanguage != null ? acceptLanguage : "",
-                acceptEncoding != null ? acceptEncoding : "");
-        
+                acceptEncoding != null ? acceptEncoding : "",
+                fingerprintCookie != null ? fingerprintCookie : "");
         return Integer.toHexString(fingerprint.hashCode());
     }
 
