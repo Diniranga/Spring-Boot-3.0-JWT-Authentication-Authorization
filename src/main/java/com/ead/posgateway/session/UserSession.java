@@ -49,9 +49,6 @@ public class UserSession {
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
-    @Column(name = "is_expired", nullable = false)
-    private boolean isExpired = false;
-
     @Column(name = "is_revoked", nullable = false)
     private boolean isRevoked = false;
 
@@ -80,12 +77,13 @@ public class UserSession {
 
     // Helper methods
     public boolean isValid() {
-        return isActive && !isExpired && !isRevoked && 
+        return isActive && !isExpired() && !isRevoked && 
                LocalDateTime.now().isBefore(expiresAt);
     }
 
+    @Transient
     public boolean isExpired() {
-        return LocalDateTime.now().isAfter(expiresAt);
+        return LocalDateTime.now().isAfter(this.expiresAt);
     }
 
     public void revoke(String reason, String revokedBy) {
@@ -102,10 +100,6 @@ public class UserSession {
 
     public void extendSession(int additionalMinutes) {
         this.expiresAt = this.expiresAt.plusMinutes(additionalMinutes);
-    }
-
-    public void setIsExpired(boolean isExpired) {
-        this.isExpired = isExpired;
     }
 
     public void setIsActive(boolean isActive) {

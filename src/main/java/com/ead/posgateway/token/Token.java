@@ -38,11 +38,7 @@ public class Token {
     private User user;
 
     // Token fingerprinting and session tracking
-    private String deviceFingerprint;
-    private String ipAddress;
-    private String userAgent;
     private LocalDateTime createdAt;
-    private LocalDateTime lastUsedAt;
     private String sessionId;
     private boolean isActive;
 

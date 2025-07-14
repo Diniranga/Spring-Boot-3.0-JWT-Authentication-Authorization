@@ -33,7 +33,7 @@ public class SessionService {
     private int sessionTimeoutMinutes;
 
     /**
-     * Create a new user session or reuse existing session from same device
+     * Create a new user session, always revoking any existing session from the same device
      * @return SessionCreationResult containing the session and whether it was reused
      */
     public SessionCreationResult createSession(User user, HttpServletRequest request, UserSession.SessionType sessionType) {
@@ -41,30 +41,14 @@ public class SessionService {
         String ipAddress = getClientIpAddress(request);
         String userAgent = request.getHeader("User-Agent");
 
-        // Check for existing active session from the same device
-        Optional<UserSession> existingSessionOpt = userSessionRepository.findByUserAndDeviceFingerprint(user, deviceFingerprint);
-        if (existingSessionOpt.isPresent()) {
-            UserSession existingSession = existingSessionOpt.get();
-            
-            // Check if the existing session is still valid
-            if (existingSession.isValid() && !existingSession.isExpired() && !existingSession.isRevoked()) {
-                // Reuse existing session - update last used time and extend expiration
-                existingSession.updateLastUsed();
-                existingSession.setExpiresAt(LocalDateTime.now().plusMinutes(sessionTimeoutMinutes));
-                existingSession.setIpAddress(ipAddress); // Update IP in case it changed
-                existingSession.setUserAgent(userAgent); // Update user agent in case it changed
-                
-                UserSession updatedSession = userSessionRepository.save(existingSession);
-                
-                log.info("Reusing existing session for user: {} with session ID: {} from IP: {}", 
+        // Check for existing active session from the same device and revoke it
+        List<UserSession> existingSessions = userSessionRepository.findByUserAndDeviceFingerprint(user, deviceFingerprint);
+        for (UserSession existingSession : existingSessions) {
+            if (!existingSession.isRevoked() && !existingSession.isExpired()) {
+                existingSession.revoke("New session created from same device", "SYSTEM");
+                userSessionRepository.save(existingSession);
+                log.info("Revoked existing session for user: {} with session ID: {} from IP: {} before creating new session", 
                         user.getEmail(), existingSession.getSessionId(), ipAddress);
-                
-                return new SessionCreationResult(updatedSession, true);
-            } else {
-                // Existing session is invalid, remove it
-                log.info("Removing invalid existing session for user: {} with session ID: {}", 
-                        user.getEmail(), existingSession.getSessionId());
-                userSessionRepository.delete(existingSession);
             }
         }
 
@@ -83,7 +67,6 @@ public class SessionService {
                 .lastUsedAt(LocalDateTime.now())
                 .expiresAt(LocalDateTime.now().plusMinutes(sessionTimeoutMinutes))
                 .isActive(true)
-                .isExpired(false)
                 .isRevoked(false)
                 .sessionType(sessionType)
                 .loginMethod(UserSession.LoginMethod.PASSWORD)
@@ -98,7 +81,7 @@ public class SessionService {
         // Track session creation
         securityMonitoringService.trackSessionCreation(user.getEmail(), sessionId, ipAddress, userAgent);
 
-        log.info("New session created for user: {} with session ID: {} from IP: {}", 
+        log.info("New session created for user: {} with session ID: {} from IP: {} (previous session revoked)", 
                 user.getEmail(), sessionId, ipAddress);
 
         return new SessionCreationResult(savedSession, false);
@@ -128,7 +111,6 @@ public class SessionService {
                 .lastUsedAt(LocalDateTime.now())
                 .expiresAt(LocalDateTime.now().plusMinutes(sessionTimeoutMinutes))
                 .isActive(true)
-                .isExpired(false)
                 .isRevoked(false)
                 .sessionType(sessionType)
                 .loginMethod(UserSession.LoginMethod.PASSWORD)
@@ -173,7 +155,6 @@ public class SessionService {
 
         // Check if session is expired
         if (session.isExpired()) {
-            session.setIsExpired(true);
             session.setIsActive(false);
             userSessionRepository.save(session);
             
@@ -238,7 +219,7 @@ public class SessionService {
      * Invalidate all sessions for a user
      */
     public void invalidateAllSessions(User user, String reason) {
-        List<UserSession> activeSessions = userSessionRepository.findByUserAndIsActiveTrueAndIsExpiredFalseAndIsRevokedFalse(user);
+        List<UserSession> activeSessions = userSessionRepository.findActiveSessionsByUser(user);
         
         activeSessions.forEach(session -> {
             session.revoke(reason, "SYSTEM");
@@ -262,7 +243,7 @@ public class SessionService {
      * Get active sessions for a user
      */
     public List<UserSession> getActiveSessions(User user) {
-        return userSessionRepository.findByUserAndIsActiveTrueAndIsExpiredFalseAndIsRevokedFalse(user);
+        return userSessionRepository.findActiveSessionsByUser(user);
     }
 
     /**
@@ -279,7 +260,6 @@ public class SessionService {
         List<UserSession> expiredSessions = userSessionRepository.findSessionsToExpire(LocalDateTime.now());
         
         expiredSessions.forEach(session -> {
-            session.setIsExpired(true);
             session.setIsActive(false);
             
             securityMonitoringService.trackSessionInvalidation(

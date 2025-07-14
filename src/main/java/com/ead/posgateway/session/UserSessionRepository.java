@@ -20,7 +20,8 @@ public interface UserSessionRepository extends JpaRepository<UserSession, Long> 
     Optional<UserSession> findByDeviceFingerprint(String deviceFingerprint);
 
     // Find active sessions for a user
-    List<UserSession> findByUserAndIsActiveTrueAndIsExpiredFalseAndIsRevokedFalse(User user);
+    @Query("SELECT s FROM UserSession s WHERE s.user = :user AND s.isActive = true AND s.isRevoked = false AND s.expiresAt > CURRENT_TIMESTAMP")
+    List<UserSession> findActiveSessionsByUser(@Param("user") User user);
 
     // Find all sessions for a user
     List<UserSession> findByUser(User user);
@@ -47,7 +48,7 @@ public interface UserSessionRepository extends JpaRepository<UserSession, Long> 
     List<UserSession> findByLoginMethod(UserSession.LoginMethod loginMethod);
 
     // Find active sessions count for a user
-    @Query("SELECT COUNT(s) FROM UserSession s WHERE s.user = :user AND s.isActive = true AND s.isExpired = false AND s.isRevoked = false")
+    @Query("SELECT COUNT(s) FROM UserSession s WHERE s.user = :user AND s.isActive = true AND s.isRevoked = false AND s.expiresAt > CURRENT_TIMESTAMP")
     long countActiveSessionsByUser(@Param("user") User user);
 
     // Find sessions by geographic location
@@ -71,7 +72,7 @@ public interface UserSessionRepository extends JpaRepository<UserSession, Long> 
     List<UserSession> findByUserAndSessionTypeAndActive(@Param("user") User user, @Param("sessionType") UserSession.SessionType sessionType);
 
     // Find sessions by device fingerprint and user
-    Optional<UserSession> findByUserAndDeviceFingerprint(User user, String deviceFingerprint);
+    List<UserSession> findByUserAndDeviceFingerprint(User user, String deviceFingerprint);
 
     // Find sessions by IP address and user
     List<UserSession> findByUserAndIpAddress(User user, String ipAddress);
