@@ -1,12 +1,12 @@
 spring:
   datasource:
-    url: ${MYSQL_URL}
+    url: jdbc:mysql://${MYSQLHOST}:${MYSQLPORT}/${MYSQLDATABASE}
     username: ${MYSQLUSER}
     password: ${MYSQLPASSWORD}
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: false
+    show-sql: true
 logging:
   level:
     root: INFO
