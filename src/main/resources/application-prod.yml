@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: mysql://turntable.proxy.rlwy.net:31212/railway
+    url: jdbc:mysql://turntable.proxy.rlwy.net:31212/railway
     username: root
     password: EZwNMSHqMPITjtkmmNQgwDNxhSbBAyGk
   jpa:
