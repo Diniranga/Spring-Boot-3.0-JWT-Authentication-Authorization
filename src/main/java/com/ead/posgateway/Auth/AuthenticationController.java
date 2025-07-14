@@ -3,13 +3,17 @@ package com.ead.posgateway.Auth;
 import com.ead.posgateway.Config.SecurityContextUtils;
 import com.ead.posgateway.Auth.LogoutService;
 import com.ead.posgateway.User.User;
-import com.ead.posgateway.token.Token;
+import com.ead.posgateway.dto.SessionDto;
+import com.ead.posgateway.dto.UserDto;
+import com.ead.posgateway.session.SessionService;
+import com.ead.posgateway.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -18,30 +22,34 @@ import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
+@Slf4j
 public class AuthenticationController {
 
     private final AuthenticationService service;
     private final LogoutService logoutService;
-    private final SessionManagementService sessionManagementService;
-    private final SecurityMonitoringService securityMonitoringService;
+    private final SessionService sessionService;
+    private final UserService userService;
 
     @PostMapping("/register")
     public ResponseEntity<AuthenticationResponse> register(
-            @RequestBody RegisterRequest request,
+            @Valid @RequestBody RegisterRequest request,
             HttpServletRequest httpRequest
-    ){
+    ) {
+        log.info("Registration request received for email: {}", request.getEmail());
         return ResponseEntity.ok(service.register(request, httpRequest));
     }
 
     @PostMapping("/login")
     public ResponseEntity<AuthenticationResponse> login(
-            @RequestBody AuthenticationRequest request,
+            @Valid @RequestBody AuthenticationRequest request,
             HttpServletRequest httpRequest
-    ){
+    ) {
+        log.info("Login request received for email: {}", request.getEmail());
         return ResponseEntity.ok(service.authenticate(request, httpRequest));
     }
 
@@ -54,11 +62,15 @@ public class AuthenticationController {
     }
 
     @PostMapping("/validateToken")
-    public boolean validateToken(
-            @RequestBody TokenValidationRequest tokenValidationRequest,
+    public ResponseEntity<Map<String, Object>> validateToken(
+            @Valid @RequestBody TokenValidationRequest tokenValidationRequest,
             HttpServletRequest request
-    ){
-        return service.validateToken(tokenValidationRequest.getToken(), tokenValidationRequest.getEmail(), request);
+    ) {
+        boolean isValid = service.validateToken(tokenValidationRequest.getToken(), tokenValidationRequest.getEmail(), request);
+        Map<String, Object> response = new HashMap<>();
+        response.put("valid", isValid);
+        response.put("message", isValid ? "Token is valid" : "Token is invalid");
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/security-context")
@@ -103,6 +115,7 @@ public class AuthenticationController {
             String token = authHeader.substring(7);
             logoutService.logout(token);
             response.put("message", "Logout successful");
+            log.info("User logged out successfully");
         } else {
             response.put("message", "No token provided");
         }
@@ -118,6 +131,7 @@ public class AuthenticationController {
         if (userEmail != null) {
             logoutService.logoutAllSessions(userEmail);
             response.put("message", "All sessions logged out successfully");
+            log.info("All sessions logged out for user: {}", userEmail);
         } else {
             response.put("message", "User not authenticated");
         }
@@ -126,36 +140,9 @@ public class AuthenticationController {
     }
 
     @PostMapping("/account-status")
-    public ResponseEntity<Map<String, Object>> getAccountStatus(@RequestBody AuthenticationRequest request) {
-        Map<String, Object> response = new HashMap<>();
-        
-        var userOpt = service.getUserRepository().findByEmail(request.getEmail());
-        if (userOpt.isEmpty()) {
-            response.put("exists", false);
-            response.put("message", "Account not found");
-        } else {
-            var user = userOpt.get();
-            response.put("exists", true);
-            response.put("accountLocked", user.isAccountLocked());
-            response.put("failedLoginAttempts", user.getFailedLoginAttempts());
-            response.put("activeSessions", user.getActiveSessions());
-            response.put("maxConcurrentSessions", user.getMaxConcurrentSessions());
-            response.put("lastLoginTime", user.getLastLoginTime());
-            response.put("lastLoginIp", user.getLastLoginIp());
-            response.put("lastPasswordChange", user.getLastPasswordChange());
-            
-            if (user.isAccountLocked() && user.getLockTime() != null) {
-                long minutesSinceLock = ChronoUnit.MINUTES.between(
-                    user.getLockTime(), LocalDateTime.now());
-                long remainingMinutes = Math.max(0, 15 - minutesSinceLock); // 15 is cooldown from config
-                response.put("remainingLockMinutes", remainingMinutes);
-                response.put("lockTime", user.getLockTime());
-            }
-            
-            response.put("message", "Account status retrieved");
-        }
-        
-        return ResponseEntity.ok(response);
+    public ResponseEntity<UserDto> getAccountStatus(@Valid @RequestBody AuthenticationRequest request) {
+        UserDto userDto = service.getAccountStatus(request.getEmail());
+        return ResponseEntity.ok(userDto);
     }
 
     // Session management endpoints
@@ -166,35 +153,17 @@ public class AuthenticationController {
         
         String userEmail = SecurityContextUtils.getCurrentUserEmail();
         if (userEmail != null) {
-            var userOpt = service.getUserRepository().findByEmail(userEmail);
+            var userOpt = userService.findByEmail(userEmail);
             if (userOpt.isPresent()) {
                 User user = userOpt.get();
-                var sessionStatistics = sessionManagementService.getSessionStatistics(user);
-                var activeSessions = sessionManagementService.getActiveSessions(user);
+                var activeSessions = sessionService.getActiveSessions(user);
                 
                 response.put("userEmail", userEmail);
-                response.put("sessionStatistics", sessionStatistics);
-                response.put("sessions", activeSessions.stream().map(session -> {
-                    Map<String, Object> sessionInfo = new HashMap<>();
-                    sessionInfo.put("sessionId", session.getSessionId());
-                    sessionInfo.put("sessionType", session.getSessionType());
-                    sessionInfo.put("loginMethod", session.getLoginMethod());
-                    sessionInfo.put("ipAddress", session.getIpAddress());
-                    sessionInfo.put("userAgent", session.getUserAgent());
-                    sessionInfo.put("deviceFingerprint", session.getDeviceFingerprint());
-                    sessionInfo.put("deviceInfo", session.getDeviceInfo());
-                    sessionInfo.put("geographicLocation", session.getGeographicLocation());
-                    sessionInfo.put("createdAt", session.getCreatedAt());
-                    sessionInfo.put("lastUsedAt", session.getLastUsedAt());
-                    sessionInfo.put("expiresAt", session.getExpiresAt());
-                    sessionInfo.put("isValid", session.isValid());
-                    sessionInfo.put("isExpired", session.isExpired());
-                    sessionInfo.put("isRevoked", session.isRevoked());
-                    sessionInfo.put("revokedReason", session.getRevokedReason());
-                    sessionInfo.put("revokedAt", session.getRevokedAt());
-                    sessionInfo.put("revokedBy", session.getRevokedBy());
-                    return sessionInfo;
-                }).toList());
+                response.put("activeSessions", activeSessions.size());
+                response.put("maxConcurrentSessions", user.getMaxConcurrentSessions());
+                response.put("sessions", activeSessions.stream()
+                        .map(SessionDto::fromUserSession)
+                        .collect(Collectors.toList()));
                 response.put("message", "Active sessions retrieved");
             } else {
                 response.put("message", "User not found");
@@ -212,34 +181,16 @@ public class AuthenticationController {
         
         String userEmail = SecurityContextUtils.getCurrentUserEmail();
         if (userEmail != null) {
-            var userOpt = service.getUserRepository().findByEmail(userEmail);
+            var userOpt = userService.findByEmail(userEmail);
             if (userOpt.isPresent()) {
                 User user = userOpt.get();
-                var allSessions = sessionManagementService.getAllSessions(user);
+                var allSessions = sessionService.getAllSessions(user);
                 
                 response.put("userEmail", userEmail);
                 response.put("totalSessions", allSessions.size());
-                response.put("sessions", allSessions.stream().map(session -> {
-                    Map<String, Object> sessionInfo = new HashMap<>();
-                    sessionInfo.put("sessionId", session.getSessionId());
-                    sessionInfo.put("sessionType", session.getSessionType());
-                    sessionInfo.put("loginMethod", session.getLoginMethod());
-                    sessionInfo.put("ipAddress", session.getIpAddress());
-                    sessionInfo.put("userAgent", session.getUserAgent());
-                    sessionInfo.put("deviceFingerprint", session.getDeviceFingerprint());
-                    sessionInfo.put("deviceInfo", session.getDeviceInfo());
-                    sessionInfo.put("geographicLocation", session.getGeographicLocation());
-                    sessionInfo.put("createdAt", session.getCreatedAt());
-                    sessionInfo.put("lastUsedAt", session.getLastUsedAt());
-                    sessionInfo.put("expiresAt", session.getExpiresAt());
-                    sessionInfo.put("isValid", session.isValid());
-                    sessionInfo.put("isExpired", session.isExpired());
-                    sessionInfo.put("isRevoked", session.isRevoked());
-                    sessionInfo.put("revokedReason", session.getRevokedReason());
-                    sessionInfo.put("revokedAt", session.getRevokedAt());
-                    sessionInfo.put("revokedBy", session.getRevokedBy());
-                    return sessionInfo;
-                }).toList());
+                response.put("sessions", allSessions.stream()
+                        .map(SessionDto::fromUserSession)
+                        .collect(Collectors.toList()));
                 response.put("message", "All sessions retrieved");
             } else {
                 response.put("message", "User not found");
@@ -259,16 +210,13 @@ public class AuthenticationController {
         Map<String, String> response = new HashMap<>();
         
         Integer additionalMinutes = request.get("additionalMinutes");
-        if (additionalMinutes != null && additionalMinutes > 0) {
-            try {
-                sessionManagementService.extendSession(sessionId, additionalMinutes);
-                response.put("message", "Session extended by " + additionalMinutes + " minutes");
-            } catch (Exception e) {
-                response.put("message", "Failed to extend session: " + e.getMessage());
-            }
-        } else {
+        if (additionalMinutes == null || additionalMinutes <= 0) {
             response.put("message", "Invalid additional minutes value");
+            return ResponseEntity.badRequest().body(response);
         }
+        
+        sessionService.extendSession(sessionId, additionalMinutes);
+        response.put("message", "Session extended successfully");
         
         return ResponseEntity.ok(response);
     }
@@ -277,18 +225,18 @@ public class AuthenticationController {
     public ResponseEntity<Map<String, String>> changePassword(@RequestBody Map<String, String> request) {
         Map<String, String> response = new HashMap<>();
         
-        String userEmail = SecurityContextUtils.getCurrentUserEmail();
         String newPassword = request.get("newPassword");
+        if (newPassword == null || newPassword.trim().isEmpty()) {
+            response.put("message", "New password is required");
+            return ResponseEntity.badRequest().body(response);
+        }
         
-        if (userEmail != null && newPassword != null) {
-            try {
-                service.changePassword(userEmail, newPassword);
-                response.put("message", "Password changed successfully. All sessions have been invalidated for security.");
-            } catch (Exception e) {
-                response.put("message", "Failed to change password: " + e.getMessage());
-            }
+        String userEmail = SecurityContextUtils.getCurrentUserEmail();
+        if (userEmail != null) {
+            service.changePassword(userEmail, newPassword);
+            response.put("message", "Password changed successfully. All sessions have been invalidated for security.");
         } else {
-            response.put("message", "Invalid request parameters");
+            response.put("message", "User not authenticated");
         }
         
         return ResponseEntity.ok(response);
@@ -298,29 +246,33 @@ public class AuthenticationController {
     public ResponseEntity<Map<String, String>> cleanupExpiredSessions() {
         Map<String, String> response = new HashMap<>();
         
-        try {
-            sessionManagementService.cleanupExpiredSessions();
-            response.put("message", "Expired sessions cleaned up successfully");
-        } catch (Exception e) {
-            response.put("message", "Failed to cleanup sessions: " + e.getMessage());
-        }
+        sessionService.cleanupExpiredSessions();
+        response.put("message", "Expired sessions cleaned up successfully");
         
         return ResponseEntity.ok(response);
     }
-
-    // Security monitoring endpoints
 
     @GetMapping("/security/statistics")
     public ResponseEntity<Map<String, Object>> getSecurityStatistics() {
         Map<String, Object> response = new HashMap<>();
         
-        // Check if user has admin role
-        if (SecurityContextUtils.hasAuthority("ROLE_ADMIN")) {
-            Map<String, Object> stats = securityMonitoringService.getSecurityStatistics();
-            response.put("statistics", stats);
-            response.put("message", "Security statistics retrieved");
+        String userEmail = SecurityContextUtils.getCurrentUserEmail();
+        if (userEmail != null) {
+            var userOpt = userService.findByEmail(userEmail);
+            if (userOpt.isPresent()) {
+                User user = userOpt.get();
+                UserDto userDto = userService.getUserDto(user);
+                
+                response.put("userEmail", userEmail);
+                response.put("accountStatus", userDto);
+                response.put("activeSessions", sessionService.getActiveSessions(user).size());
+                response.put("totalSessions", sessionService.getAllSessions(user).size());
+                response.put("message", "Security statistics retrieved");
+            } else {
+                response.put("message", "User not found");
+            }
         } else {
-            response.put("message", "Access denied. Admin role required.");
+            response.put("message", "User not authenticated");
         }
         
         return ResponseEntity.ok(response);
@@ -330,33 +282,18 @@ public class AuthenticationController {
     public ResponseEntity<Map<String, String>> resetSecurityCounters(@RequestBody Map<String, String> request) {
         Map<String, String> response = new HashMap<>();
         
-        // Check if user has admin role
-        if (SecurityContextUtils.hasAuthority("ROLE_ADMIN")) {
-            String userEmail = request.get("userEmail");
-            if (userEmail != null) {
-                securityMonitoringService.resetUserSecurityCounters(userEmail);
-                response.put("message", "Security counters reset for user: " + userEmail);
+        String userEmail = SecurityContextUtils.getCurrentUserEmail();
+        if (userEmail != null) {
+            var userOpt = userService.findByEmail(userEmail);
+            if (userOpt.isPresent()) {
+                User user = userOpt.get();
+                userService.resetFailedAttempts(user);
+                response.put("message", "Security counters reset successfully");
             } else {
-                response.put("message", "User email is required");
+                response.put("message", "User not found");
             }
         } else {
-            response.put("message", "Access denied. Admin role required.");
-        }
-        
-        return ResponseEntity.ok(response);
-    }
-
-    @GetMapping("/security/events")
-    public ResponseEntity<Map<String, Object>> getSecurityEvents() {
-        Map<String, Object> response = new HashMap<>();
-        
-        // Check if user has admin role
-        if (SecurityContextUtils.hasAuthority("ROLE_ADMIN")) {
-            Map<String, Object> stats = securityMonitoringService.getSecurityStatistics();
-            response.put("securityEvents", stats);
-            response.put("message", "Security events retrieved");
-        } else {
-            response.put("message", "Access denied. Admin role required.");
+            response.put("message", "User not authenticated");
         }
         
         return ResponseEntity.ok(response);

@@ -10,11 +10,11 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 import static com.ead.posgateway.User.Permission.*;
 import static com.ead.posgateway.User.Role.*;
 import static org.springframework.http.HttpMethod.*;
-
 
 @Configuration
 @EnableWebSecurity
@@ -28,29 +28,31 @@ public class SecurityConfiguration {
     private final RateLimitFilter rateLimitFilter;
     private final SecurityHeadersFilter securityHeadersFilter;
 
-
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf()
-                .disable()
-                .authorizeHttpRequests()
-                .requestMatchers("/auth/**").permitAll()
-                .requestMatchers("/test/public").permitAll()
-                .requestMatchers("/test/test-rate-limit").permitAll()
-                .requestMatchers("/test/test-https").permitAll()
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .ignoringRequestMatchers("/auth/**") // Allow auth endpoints without CSRF
+                )
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/auth/**").permitAll()
+                        .requestMatchers("/test/public").permitAll()
+                        .requestMatchers("/test/test-rate-limit").permitAll()
+                        .requestMatchers("/test/test-https").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/actuator/health").permitAll()
 
-                .requestMatchers("/demo/**").hasAnyRole(ADMIN.name(), USER.name())
+                        .requestMatchers("/demo/**").hasAnyRole(ADMIN.name(), USER.name())
 
-                .requestMatchers(GET, "/demo/**").hasAnyAuthority(USER_READ.getPermission())
-                .requestMatchers(POST, "/demo/**").hasAnyAuthority(ADMIN_READ.getPermission())
+                        .requestMatchers(GET, "/demo/**").hasAnyAuthority(USER_READ.getPermission())
+                        .requestMatchers(POST, "/demo/**").hasAnyAuthority(ADMIN_READ.getPermission())
 
-                .anyRequest()
-                    .authenticated()
-                .and()
-                    .sessionManagement()
-                    .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                .and()
+                        .anyRequest().authenticated()
+                )
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
                 .authenticationProvider(authenticationProvider)
                 // Add filters in order (SecurityHeadersFilter -> RateLimitFilter -> JwtAuthenticationFilter)
                 .addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class)

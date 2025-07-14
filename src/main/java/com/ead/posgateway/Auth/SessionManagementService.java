@@ -39,7 +39,8 @@ public class SessionManagementService {
      */
     public Token createSession(User user, String accessToken, String refreshToken, HttpServletRequest request) {
         // Create user session first
-        UserSession userSession = sessionService.createSession(user, request, UserSession.SessionType.WEB);
+        SessionService.SessionCreationResult result = sessionService.createSession(user, request, UserSession.SessionType.WEB);
+        UserSession userSession = result.getSession();
         
         // Create token record linked to the session
         Token token = Token.builder()
@@ -55,8 +56,8 @@ public class SessionManagementService {
 
         Token savedToken = tokenRepository.save(token);
 
-        log.info("Session and token created for user: {} with session ID: {}", 
-                user.getEmail(), userSession.getSessionId());
+        log.info("Session and token created for user: {} with session ID: {} (reused: {})", 
+                user.getEmail(), userSession.getSessionId(), result.isWasReused());
 
         return savedToken;
     }

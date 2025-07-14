@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -22,6 +23,7 @@ import java.io.IOException;
 @Component
 @RequiredArgsConstructor
 @Order(2)
+@Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
@@ -40,7 +42,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             final String jwtToken;
             final String userEmail;
             
-            if(authHeader == null || !authHeader.startsWith("Bearer ")) {
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 filterChain.doFilter(request, response);
                 return;
             }
@@ -48,29 +50,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             jwtToken = authHeader.substring(7);
             userEmail = jwtService.extractUserEmail(jwtToken);
             
-            if(userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null){
+            if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
                 
                 // Enhanced session validation with device fingerprinting
                 boolean isSessionValid = sessionManagementService.validateSession(jwtToken, request);
                 boolean isTokenValid = jwtService.isTokenValid(jwtToken, userDetails);
                         
-                if(isTokenValid && isSessionValid){
+                if (isTokenValid && isSessionValid) {
                     // Best Practice: Use utility class for setting security context
                     SecurityContextUtils.setSecurityContext(userDetails, jwtToken, request);
-                    System.out.println("Security context set for user: " + userEmail);
+                    log.debug("Security context set for user: {}", userEmail);
                 } else {
                     // Log security event for invalid session
-                    System.out.println("Invalid session detected for user: " + userEmail + 
-                                     " - Token valid: " + isTokenValid + 
-                                     " - Session valid: " + isSessionValid);
+                    log.warn("Invalid session detected for user: {} - Token valid: {} - Session valid: {}", 
+                            userEmail, isTokenValid, isSessionValid);
                 }
             }
-            filterChain.doFilter(request,response);
+            filterChain.doFilter(request, response);
         } catch (Exception e) {
             // Best Practice: Clear security context on error
             SecurityContextUtils.clearSecurityContext();
-            System.err.println("Error in JWT filter: " + e.getMessage());
+            log.error("Error in JWT filter for request: {}", request.getRequestURI(), e);
             filterChain.doFilter(request, response);
         }
     }
