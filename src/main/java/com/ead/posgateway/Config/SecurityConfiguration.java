@@ -45,9 +45,6 @@ public class SecurityConfiguration {
 
                         .requestMatchers("/demo/**").hasAnyRole(ADMIN.name(), USER.name())
 
-                        .requestMatchers(GET, "/demo/**").hasAnyAuthority(USER_READ.getPermission())
-                        .requestMatchers(POST, "/demo/**").hasAnyAuthority(ADMIN_READ.getPermission())
-
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session

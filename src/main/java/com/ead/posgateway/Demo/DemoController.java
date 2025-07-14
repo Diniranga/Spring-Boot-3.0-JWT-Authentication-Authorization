@@ -15,7 +15,7 @@ import java.util.Map;
 @Slf4j
 public class DemoController {
 
-    @GetMapping
+    @GetMapping("/get")
     @PreAuthorize("hasAuthority('USER:READ')")
     public ResponseEntity<Map<String, String>> demo() {
         Map<String, String> response = new HashMap<>();
@@ -24,7 +24,7 @@ public class DemoController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping
+    @PostMapping("/post")
     @PreAuthorize("hasAuthority('ADMIN:READ')")
     public ResponseEntity<Map<String, String>> demoPost() {
         Map<String, String> response = new HashMap<>();
