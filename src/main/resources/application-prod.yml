@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:mysql://${MYSQLHOST}:${MYSQLPORT}/${MYSQLDATABASE}
-    username: ${MYSQLUSER}
-    password: ${MYSQLPASSWORD}
+    url: mysql://turntable.proxy.rlwy.net:31212/railway
+    username: root
+    password: EZwNMSHqMPITjtkmmNQgwDNxhSbBAyGk
   jpa:
     hibernate:
       ddl-auto: update

@@ -2,9 +2,9 @@ spring:
   profiles:
     active: prod
   datasource:
-    url: mysql://root:EZwNMSHqMPITjtkmmNQgwDNxhSbBAyGk@mysql.railway.internal:3306/railway
+    url: mysql://turntable.proxy.rlwy.net:31212/railway
     username: root
-    password: root
+    password: EZwNMSHqMPITjtkmmNQgwDNxhSbBAyGk
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
