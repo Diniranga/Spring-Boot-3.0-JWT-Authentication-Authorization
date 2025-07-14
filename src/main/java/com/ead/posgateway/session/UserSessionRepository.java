@@ -14,7 +14,8 @@ import java.util.Optional;
 public interface UserSessionRepository extends JpaRepository<UserSession, Long> {
 
     // Find by session ID
-    Optional<UserSession> findBySessionId(String sessionId);
+    @Query("SELECT s FROM UserSession s JOIN FETCH s.user WHERE s.sessionId = :sessionId")
+    Optional<UserSession> findBySessionId(@Param("sessionId") String sessionId);
 
     // Find by device fingerprint
     Optional<UserSession> findByDeviceFingerprint(String deviceFingerprint);
