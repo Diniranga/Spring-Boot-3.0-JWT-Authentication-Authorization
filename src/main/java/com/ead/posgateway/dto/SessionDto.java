@@ -23,7 +23,6 @@ public class SessionDto {
     private String userAgent;
     private String deviceFingerprint;
     private String deviceInfo;
-    private String geographicLocation;
     private LocalDateTime createdAt;
     private LocalDateTime lastUsedAt;
     private LocalDateTime expiresAt;
@@ -43,7 +42,6 @@ public class SessionDto {
                 .userAgent(session.getUserAgent())
                 .deviceFingerprint(session.getDeviceFingerprint())
                 .deviceInfo(session.getDeviceInfo())
-                .geographicLocation(session.getGeographicLocation())
                 .createdAt(session.getCreatedAt())
                 .lastUsedAt(session.getLastUsedAt())
                 .expiresAt(session.getExpiresAt())

@@ -60,9 +60,6 @@ public class UserSession {
     @Enumerated(EnumType.STRING)
     private LoginMethod loginMethod = LoginMethod.PASSWORD;
 
-    @Column(name = "geographic_location")
-    private String geographicLocation;
-
     @Column(name = "device_info")
     private String deviceInfo;
 

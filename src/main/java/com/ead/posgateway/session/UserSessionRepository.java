@@ -51,9 +51,6 @@ public interface UserSessionRepository extends JpaRepository<UserSession, Long> 
     @Query("SELECT COUNT(s) FROM UserSession s WHERE s.user = :user AND s.isActive = true AND s.isRevoked = false AND s.expiresAt > CURRENT_TIMESTAMP")
     long countActiveSessionsByUser(@Param("user") User user);
 
-    // Find sessions by geographic location
-    List<UserSession> findByGeographicLocation(String geographicLocation);
-
     // Find sessions that need to be expired
     @Query("SELECT s FROM UserSession s WHERE s.expiresAt <= :now AND s.isActive = true")
     List<UserSession> findSessionsToExpire(@Param("now") LocalDateTime now);
