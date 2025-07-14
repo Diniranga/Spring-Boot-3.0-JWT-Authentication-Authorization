@@ -3,6 +3,7 @@ package com.ead.posgateway.Config;
 import com.ead.posgateway.session.SessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -13,10 +14,13 @@ public class SessionCleanupScheduler {
 
     private final SessionService sessionService;
 
+    @Value("${spring.application.security.session.cleanup-interval-minutes}")
+    private int cleanupIntervalMinutes;
+
     /**
-     * Cleanup expired sessions every 5 minutes
+     * Cleanup expired sessions every X minutes (configurable)
      */
-    @Scheduled(fixedRate = 300000) // 5 minutes
+    @Scheduled(fixedRateString = "#{${spring.application.security.session.cleanup-interval-minutes:5} * 60 * 1000}")
     public void cleanupExpiredSessions() {
         try {
             log.info("Starting scheduled session cleanup...");
