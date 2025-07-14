@@ -43,6 +43,18 @@ public class SessionService {
         String ipAddress = getClientIpAddress(request);
         String userAgent = request.getHeader("User-Agent");
 
+        // Revoke sessions for other users on the same device
+        List<UserSession> sessionsForDevice = userSessionRepository.findActiveSessionsByDeviceFingerprint(deviceFingerprint);
+        for (UserSession session : sessionsForDevice) {
+            if (!session.getUser().getId().equals(user.getId())) {
+                session.revoke("Device used by another user", "SYSTEM");
+                userSessionRepository.save(session);
+                tokenService.revokeTokensBySessionId(session.getSessionId());
+                log.info("Revoked session for previous user {} on device {} before creating new session for user {}", 
+                    session.getUser().getEmail(), deviceFingerprint, user.getEmail());
+            }
+        }
+
         // Check for existing active session from the same device and revoke it
         List<UserSession> existingSessions = userSessionRepository.findByUserAndDeviceFingerprint(user, deviceFingerprint);
         for (UserSession existingSession : existingSessions) {

@@ -88,4 +88,7 @@ public interface UserSessionRepository extends JpaRepository<UserSession, Long> 
     // Find sessions by revoked date range
     @Query("SELECT s FROM UserSession s WHERE s.revokedAt BETWEEN :startDate AND :endDate")
     List<UserSession> findByRevokedAtBetween(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+    @Query("SELECT s FROM UserSession s WHERE s.deviceFingerprint = :deviceFingerprint AND s.isActive = true AND s.isRevoked = false AND s.expiresAt > CURRENT_TIMESTAMP")
+    List<UserSession> findActiveSessionsByDeviceFingerprint(@Param("deviceFingerprint") String deviceFingerprint);
 } 
