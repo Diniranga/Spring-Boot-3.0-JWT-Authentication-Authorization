@@ -14,7 +14,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import com.ead.posgateway.User.User;
 
 /**
  * Service for monitoring and logging security-related events.
