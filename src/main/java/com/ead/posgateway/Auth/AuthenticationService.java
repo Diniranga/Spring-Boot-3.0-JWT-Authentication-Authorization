@@ -306,7 +306,7 @@ public class AuthenticationService {
         LocalDateTime expiry = LocalDateTime.now().plusMinutes(passwordResetTokenExpirationMinutes);
         PasswordResetToken resetToken = new PasswordResetToken(token, user, expiry);
         passwordResetTokenRepository.save(resetToken);
-        String resetLink = String.format("%s/reset-password?token=%s", frontendBaseUrl, token);
+        String resetLink = String.format("%s/auth/reset-password?token=%s", frontendBaseUrl, token);
         log.info("Password reset link for {}: {} (expires in {} minutes)", email, resetLink, passwordResetTokenExpirationMinutes);
     }
 
