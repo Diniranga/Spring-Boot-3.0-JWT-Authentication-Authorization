@@ -1,3 +1,7 @@
+/*
+ * TokenService.java
+ * Service for managing JWT and refresh tokens, including creation, revocation, and validation.
+ */
 package com.ead.posgateway.service;
 
 import com.ead.posgateway.Config.JwtService;
@@ -15,16 +19,29 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Service for managing JWT and refresh tokens, including creation, revocation, and validation.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 @Transactional
 public class TokenService {
 
+    /** Repository for token persistence. */
     private final TokenRepository tokenRepository;
+    /** Service for JWT operations. */
     private final JwtService jwtService;
 
-    public Token createToken(User user, String accessToken, String refreshToken, String sessionId) {
+    /**
+     * Creates and saves a new token for the user.
+     * @param user User entity
+     * @param accessToken JWT access token
+     * @param refreshToken JWT refresh token
+     * @param sessionId Session identifier
+     * @return Saved Token entity
+     */
+    public Token createToken(final User user, final String accessToken, final String refreshToken, final String sessionId) {
         Token token = Token.builder()
                 .user(user)
                 .accessToken(accessToken)
@@ -41,15 +58,29 @@ public class TokenService {
         return savedToken;
     }
 
-    public Optional<Token> findByToken(String tokenValue) {
+    /**
+     * Finds a token by its value.
+     * @param tokenValue Token string
+     * @return Optional containing the Token if found
+     */
+    public Optional<Token> findByToken(final String tokenValue) {
         return tokenRepository.findByToken(tokenValue);
     }
 
-    public List<Token> findByUser(User user) {
+    /**
+     * Finds all tokens for a user.
+     * @param user User entity
+     * @return List of Token entities
+     */
+    public List<Token> findByUser(final User user) {
         return tokenRepository.findByUser(user);
     }
 
-    public void revokeToken(String tokenValue) {
+    /**
+     * Revokes a token by its value.
+     * @param tokenValue Token string
+     */
+    public void revokeToken(final String tokenValue) {
         Optional<Token> tokenOpt = tokenRepository.findByToken(tokenValue);
         if (tokenOpt.isPresent()) {
             Token token = tokenOpt.get();
@@ -60,7 +91,11 @@ public class TokenService {
         }
     }
 
-    public void revokeAllUserTokens(User user) {
+    /**
+     * Revokes all tokens for a user.
+     * @param user User entity
+     */
+    public void revokeAllUserTokens(final User user) {
         List<Token> userTokens = tokenRepository.findByUser(user);
         userTokens.forEach(token -> {
             token.setRevoked(true);
@@ -70,7 +105,11 @@ public class TokenService {
         log.info("All tokens revoked for user: {}", user.getEmail());
     }
 
-    public void revokeTokensBySessionId(String sessionId) {
+    /**
+     * Revokes all tokens associated with a session ID.
+     * @param sessionId Session identifier
+     */
+    public void revokeTokensBySessionId(final String sessionId) {
         List<Token> sessionTokens = tokenRepository.findBySessionIdAndRevokedFalse(sessionId);
         sessionTokens.forEach(token -> {
             token.setRevoked(true);
@@ -80,19 +119,40 @@ public class TokenService {
         log.info("Revoked {} tokens for session: {}", sessionTokens.size(), sessionId);
     }
 
-    public String generateAccessToken(UserDetails userDetails) {
+    /**
+     * Generates a JWT access token for the given user details.
+     * @param userDetails UserDetails
+     * @return JWT access token string
+     */
+    public String generateAccessToken(final UserDetails userDetails) {
         return jwtService.generateToken(userDetails);
     }
 
-    public String generateRefreshToken(UserDetails userDetails) {
+    /**
+     * Generates a JWT refresh token for the given user details.
+     * @param userDetails UserDetails
+     * @return JWT refresh token string
+     */
+    public String generateRefreshToken(final UserDetails userDetails) {
         return jwtService.generateRefreshToken(userDetails);
     }
 
-    public boolean isTokenValid(String token, UserDetails userDetails) {
+    /**
+     * Validates a JWT token for the given user details.
+     * @param token JWT token string
+     * @param userDetails UserDetails
+     * @return true if valid, false otherwise
+     */
+    public boolean isTokenValid(final String token, final UserDetails userDetails) {
         return jwtService.isTokenValid(token, userDetails);
     }
 
-    public String extractUserEmail(String token) {
+    /**
+     * Extracts the user email from a JWT token.
+     * @param token JWT token string
+     * @return user email (subject)
+     */
+    public String extractUserEmail(final String token) {
         return jwtService.extractUserEmail(token);
     }
 } 
