@@ -6,10 +6,7 @@ package com.ead.posgateway.token;
 
 import com.ead.posgateway.User.User;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.time.LocalDateTime;
 
@@ -57,16 +54,12 @@ public class Token {
     /** Whether the token is active. */
     private boolean isActive;
 
-    /** Static reference to JwtService for token validation. */
-    private static com.ead.posgateway.Config.JwtService jwtService;
-
-    /**
-     * Sets the JwtService for static token validation.
-     * @param service JwtService instance
+    /** Static reference to JwtService for token validation.
+     * -- SETTER --
+     *  Sets the JwtService for static token validation.
      */
-    public static void setJwtService(com.ead.posgateway.Config.JwtService service) {
-        jwtService = service;
-    }
+    @Setter
+    private static com.ead.posgateway.Config.JwtService jwtService;
 
     /**
      * Checks if the access token is expired.
