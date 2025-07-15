@@ -1,3 +1,7 @@
+/*
+ * Token.java
+ * Entity representing an authentication token (access/refresh) for a user session.
+ */
 package com.ead.posgateway.token;
 
 import com.ead.posgateway.User.User;
@@ -9,6 +13,9 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/**
+ * Entity representing an authentication token (access/refresh) for a user session.
+ */
 @Data
 @Builder
 @NoArgsConstructor
@@ -16,37 +23,55 @@ import java.time.LocalDateTime;
 @Entity
 public class Token {
 
+    /** Primary key. */
     @Id
     @GeneratedValue
     private Integer id;
 
+    /** JWT access token string. */
     @Lob
     @Column(columnDefinition = "TEXT")
     private String accessToken;
 
+    /** JWT refresh token string. */
     @Lob
     @Column(columnDefinition = "TEXT")
     private String refreshToken;
 
+    /** Type of token (BEARER or REFRESH). */
     @Enumerated(EnumType.STRING)
     private TokenType tokenType = TokenType.BEARER;
+
+    /** Whether the token is revoked. */
     private boolean revoked;
 
+    /** Associated user. */
     @ManyToOne
     @JoinColumn(name = "user_id")
     private User user;
 
-    // Token fingerprinting and session tracking
+    /** Token creation timestamp. */
     private LocalDateTime createdAt;
+    /** Associated session ID. */
     private String sessionId;
+    /** Whether the token is active. */
     private boolean isActive;
 
+    /** Static reference to JwtService for token validation. */
     private static com.ead.posgateway.Config.JwtService jwtService;
 
+    /**
+     * Sets the JwtService for static token validation.
+     * @param service JwtService instance
+     */
     public static void setJwtService(com.ead.posgateway.Config.JwtService service) {
         jwtService = service;
     }
 
+    /**
+     * Checks if the access token is expired.
+     * @return true if expired, false otherwise
+     */
     @Transient
     public boolean isExpired() {
         if (accessToken == null || jwtService == null) return false;
@@ -58,23 +83,42 @@ public class Token {
         }
     }
 
-    // Helper methods for backward compatibility
+    /**
+     * Returns the access token (for backward compatibility).
+     * @return access token string
+     */
     public String getToken() {
         return accessToken;
     }
 
+    /**
+     * Sets the access token (for backward compatibility).
+     * @param token access token string
+     */
     public void setToken(String token) {
         this.accessToken = token;
     }
 
+    /**
+     * Checks if the access token is valid (not expired, not revoked, active).
+     * @return true if valid, false otherwise
+     */
     public boolean isAccessTokenValid() {
         return accessToken != null && !isExpired() && !revoked && isActive;
     }
 
+    /**
+     * Checks if the refresh token is valid (not expired, not revoked, active).
+     * @return true if valid, false otherwise
+     */
     public boolean isRefreshTokenValid() {
         return refreshToken != null && !isExpired() && !revoked && isActive;
     }
 
+    /**
+     * Sets the active status of the token.
+     * @param isActive true if active, false otherwise
+     */
     public void setIsActive(boolean isActive) {
         this.isActive = isActive;
     }
