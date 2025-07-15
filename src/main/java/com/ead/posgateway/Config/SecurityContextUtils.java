@@ -1,3 +1,8 @@
+/*
+ * SecurityContextUtils.java
+ *
+ * Utility class for managing Spring Security context and authentication details.
+ */
 package com.ead.posgateway.Config;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -11,45 +16,45 @@ import org.springframework.stereotype.Component;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+/**
+ * Utility class for managing Spring Security context and authentication details.
+ */
 @Component
 public class SecurityContextUtils {
 
     /**
-     * Best Practice: Set security context with proper error handling
+     * Sets the security context for the current thread.
+     * @param userDetails user details
+     * @param credentials credentials (e.g., JWT)
+     * @param request HTTP request
      */
     public static void setSecurityContext(UserDetails userDetails, String credentials, HttpServletRequest request) {
         try {
-            // Create authentication token
             UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                     userDetails,
                     credentials,
                     userDetails.getAuthorities()
             );
-            
-            // Set authentication details for audit
             authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-            
-            // Set security context
             SecurityContext context = SecurityContextHolder.createEmptyContext();
             context.setAuthentication(authToken);
             SecurityContextHolder.setContext(context);
-            
         } catch (Exception e) {
-            // Clear context on error
             SecurityContextHolder.clearContext();
             throw new RuntimeException("Failed to set security context", e);
         }
     }
 
     /**
-     * Best Practice: Clear security context
+     * Clears the security context for the current thread.
      */
     public static void clearSecurityContext() {
         SecurityContextHolder.clearContext();
     }
 
     /**
-     * Best Practice: Get current authentication safely
+     * Gets the current authentication object.
+     * @return the current Authentication, or null if not authenticated
      */
     public static Authentication getCurrentAuthentication() {
         SecurityContext context = SecurityContextHolder.getContext();
@@ -57,7 +62,8 @@ public class SecurityContextUtils {
     }
 
     /**
-     * Best Practice: Check if user is authenticated
+     * Checks if the current user is authenticated.
+     * @return true if authenticated, false otherwise
      */
     public static boolean isAuthenticated() {
         Authentication authentication = getCurrentAuthentication();
@@ -67,7 +73,8 @@ public class SecurityContextUtils {
     }
 
     /**
-     * Best Practice: Get current user email safely
+     * Gets the current user's email (username).
+     * @return the user's email, or null if not authenticated
      */
     public static String getCurrentUserEmail() {
         Authentication authentication = getCurrentAuthentication();
@@ -75,7 +82,9 @@ public class SecurityContextUtils {
     }
 
     /**
-     * Best Practice: Check if current user has specific authority
+     * Checks if the current user has a specific authority.
+     * @param authority the authority to check
+     * @return true if the user has the authority, false otherwise
      */
     public static boolean hasAuthority(String authority) {
         Authentication authentication = getCurrentAuthentication();

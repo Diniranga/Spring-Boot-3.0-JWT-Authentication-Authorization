@@ -1,3 +1,8 @@
+/*
+ * SecurityHeadersFilter.java
+ *
+ * Servlet filter for adding security headers and enforcing HTTPS policies.
+ */
 package com.ead.posgateway.Config;
 
 import jakarta.servlet.FilterChain;
@@ -12,6 +17,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+/**
+ * Servlet filter for adding security headers and enforcing HTTPS policies.
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -20,39 +28,33 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
 
     private final HttpsConfiguration httpsConfiguration;
 
+    /**
+     * Adds security headers and enforces HTTPS if enabled.
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, 
                                   HttpServletResponse response, 
                                   FilterChain filterChain) throws ServletException, IOException {
-        
         if (httpsConfiguration.isEnabled()) {
-            // Add security headers
             addSecurityHeaders(response);
-            
-            // Redirect HTTP to HTTPS if enabled
             if (httpsConfiguration.isRedirectHttp() && !isSecure(request)) {
                 redirectToHttps(request, response);
                 return;
             }
         }
-        
         filterChain.doFilter(request, response);
     }
 
+    /**
+     * Adds standard security headers to the response.
+     */
     private void addSecurityHeaders(HttpServletResponse response) {
-        // HTTP Strict Transport Security (HSTS)
         if (httpsConfiguration.isHstsEnabled()) {
             response.setHeader("Strict-Transport-Security", 
                 "max-age=" + httpsConfiguration.getHstsMaxAge() + "; includeSubDomains");
         }
-        
-        // Prevent clickjacking
         response.setHeader("X-Frame-Options", "DENY");
-        
-        // Prevent MIME type sniffing
         response.setHeader("X-Content-Type-Options", "nosniff");
-        
-        // Content Security Policy
         response.setHeader("Content-Security-Policy", 
             "default-src 'self'; " +
             "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
@@ -61,31 +63,28 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
             "font-src 'self'; " +
             "connect-src 'self'; " +
             "frame-ancestors 'none';");
-        
-        // Referrer Policy
         response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-        
-        // XSS Protection
         response.setHeader("X-XSS-Protection", "1; mode=block");
-        
-        // Permissions Policy
         response.setHeader("Permissions-Policy", 
             "geolocation=(), microphone=(), camera=()");
-        
-        // Remove server information
         response.setHeader("Server", "");
     }
 
+    /**
+     * Checks if the request is secure (HTTPS).
+     */
     private boolean isSecure(HttpServletRequest request) {
         return request.isSecure() || 
                "https".equalsIgnoreCase(request.getHeader("X-Forwarded-Proto")) ||
                "https".equalsIgnoreCase(request.getHeader("X-Forwarded-Scheme"));
     }
 
+    /**
+     * Redirects HTTP requests to HTTPS.
+     */
     private void redirectToHttps(HttpServletRequest request, HttpServletResponse response) throws IOException {
         String requestURL = request.getRequestURL().toString();
         String httpsURL = requestURL.replace("http://", "https://");
-        
         log.info("Redirecting HTTP request to HTTPS: {} -> {}", requestURL, httpsURL);
         response.sendRedirect(httpsURL);
     }

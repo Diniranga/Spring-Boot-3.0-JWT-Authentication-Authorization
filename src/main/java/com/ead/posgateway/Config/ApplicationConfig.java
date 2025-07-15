@@ -1,3 +1,8 @@
+/*
+ * ApplicationConfig.java
+ *
+ * Spring configuration for authentication, password encoding, and user details service.
+ */
 package com.ead.posgateway.Config;
 
 import com.ead.posgateway.User.UserRepository;
@@ -13,30 +18,46 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+/**
+ * Spring configuration for authentication, password encoding, and user details service.
+ */
 @Configuration
 @RequiredArgsConstructor
 public class ApplicationConfig {
 
     private final UserRepository userRepository;
+
+    /**
+     * Provides a UserDetailsService that loads users by email.
+     */
     @Bean
-    public UserDetailsService userDetailsService(){
+    public UserDetailsService userDetailsService() {
         return username -> userRepository.findByEmail(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User Not Found"));
     }
 
+    /**
+     * Provides an AuthenticationProvider using the custom UserDetailsService and password encoder.
+     */
     @Bean
-    public AuthenticationProvider authenticationProvider(){
+    public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
         authProvider.setUserDetailsService(userDetailsService());
         authProvider.setPasswordEncoder(passwordEncoder());
         return authProvider;
     }
 
+    /**
+     * Provides the AuthenticationManager bean.
+     */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
 
+    /**
+     * Provides a BCryptPasswordEncoder bean for password encoding.
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();

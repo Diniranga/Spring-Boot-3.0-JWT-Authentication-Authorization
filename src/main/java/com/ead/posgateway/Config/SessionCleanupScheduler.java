@@ -1,3 +1,8 @@
+/*
+ * SessionCleanupScheduler.java
+ *
+ * Scheduled task for cleaning up expired sessions at a configurable interval.
+ */
 package com.ead.posgateway.Config;
 
 import com.ead.posgateway.session.SessionService;
@@ -7,6 +12,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+/**
+ * Scheduled task for cleaning up expired sessions at a configurable interval.
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -18,9 +26,9 @@ public class SessionCleanupScheduler {
     private int cleanupIntervalMinutes;
 
     /**
-     * Cleanup expired sessions every X minutes (configurable)
+     * Cleanup expired sessions every X minutes (configurable).
      */
-    @Scheduled(fixedRateString = "#{${spring.application.security.session.cleanup-interval-minutes:5} * 60 * 1000}")
+    @Scheduled(fixedRateString = "#{${spring.application.security.session.cleanup-interval-minutes} * 60 * 1000}")
     public void cleanupExpiredSessions() {
         try {
             log.info("Starting scheduled session cleanup...");
