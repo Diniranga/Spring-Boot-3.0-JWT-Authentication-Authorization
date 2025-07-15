@@ -61,6 +61,10 @@ public class UserService {
         log.info("Password changed for user: {}", user.getEmail());
     }
 
+    public boolean matchesPassword(User user, String rawPassword) {
+        return passwordEncoder.matches(rawPassword, user.getPassword());
+    }
+
     public void resetFailedAttempts(User user) {
         user.setFailedLoginAttempts(0);
         user.setAccountLocked(false);

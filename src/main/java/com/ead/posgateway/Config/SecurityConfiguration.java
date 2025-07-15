@@ -36,7 +36,8 @@ public class SecurityConfiguration {
                         .ignoringRequestMatchers("/auth/**") // Allow auth endpoints without CSRF
                 )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/**").permitAll()
+                        .requestMatchers("/auth/register", "/auth/login", "/auth/forgot-password-reset", "/auth/validateToken").permitAll()
+                        .requestMatchers("/auth/**").authenticated()
                         .requestMatchers("/test/public").permitAll()
                         .requestMatchers("/test/test-rate-limit").permitAll()
                         .requestMatchers("/test/test-https").permitAll()

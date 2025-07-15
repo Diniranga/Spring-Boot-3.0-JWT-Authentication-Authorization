@@ -2,6 +2,7 @@ package com.ead.posgateway.Auth;
 
 import com.ead.posgateway.Config.SecurityContextUtils;
 import com.ead.posgateway.Auth.LogoutService;
+import com.ead.posgateway.Auth.ChangePasswordRequest;
 import com.ead.posgateway.User.User;
 import com.ead.posgateway.dto.SessionDto;
 import com.ead.posgateway.dto.UserDto;
@@ -145,8 +146,8 @@ public class AuthenticationController {
         return ResponseEntity.ok(userDto);
     }
 
-    @PostMapping("/request-password-reset")
-    public ResponseEntity<Map<String, String>> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
+    @PostMapping("/forgot-password-reset")
+    public ResponseEntity<Map<String, String>> forgotPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
         service.requestPasswordReset(request.getEmail());
         Map<String, String> response = new HashMap<>();
         response.put("message", "If the email exists, a password reset link has been sent.");
@@ -238,24 +239,21 @@ public class AuthenticationController {
     }
 
     @PostMapping("/change-password")
-    public ResponseEntity<Map<String, String>> changePassword(@RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, String>> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         Map<String, String> response = new HashMap<>();
-        
-        String newPassword = request.get("newPassword");
-        if (newPassword == null || newPassword.trim().isEmpty()) {
-            response.put("message", "New password is required");
-            return ResponseEntity.badRequest().body(response);
-        }
-        
         String userEmail = SecurityContextUtils.getCurrentUserEmail();
-        if (userEmail != null) {
-            service.changePassword(userEmail, newPassword);
-            response.put("message", "Password changed successfully. All sessions have been invalidated for security.");
-        } else {
+        if (userEmail == null) {
             response.put("message", "User not authenticated");
+            return ResponseEntity.status(401).body(response);
         }
-        
-        return ResponseEntity.ok(response);
+        boolean changed = service.changePassword(userEmail, request.getOldPassword(), request.getNewPassword());
+        if (changed) {
+            response.put("message", "Password changed successfully. All sessions have been invalidated for security.");
+            return ResponseEntity.ok(response);
+        } else {
+            response.put("message", "Old password is incorrect");
+            return ResponseEntity.status(400).body(response);
+        }
     }
 
     @PostMapping("/cleanup-sessions")

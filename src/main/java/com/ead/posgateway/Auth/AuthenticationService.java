@@ -257,17 +257,19 @@ public class AuthenticationService {
         }
     }
 
-    public void changePassword(String userEmail, String newPassword) {
+    public boolean changePassword(String userEmail, String oldPassword, String newPassword) {
         User user = userService.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        
+        // Check old password
+        if (!userService.matchesPassword(user, oldPassword)) {
+            return false;
+        }
         userService.changePassword(user, newPassword);
-        
         // Invalidate all sessions for security
         sessionService.invalidateAllSessions(user, "Password change");
         tokenService.revokeAllUserTokens(user);
-        
         log.info("Password changed for user: {}. All sessions invalidated.", userEmail);
+        return true;
     }
 
     public UserDto getAccountStatus(String email) {
