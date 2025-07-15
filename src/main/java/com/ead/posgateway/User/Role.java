@@ -1,3 +1,7 @@
+/*
+ * Role.java
+ * Enum representing user roles and their associated permissions.
+ */
 package com.ead.posgateway.User;
 
 import lombok.Getter;
@@ -10,8 +14,12 @@ import java.util.stream.Collectors;
 
 import static com.ead.posgateway.User.Permission.*;
 
+/**
+ * Enum representing user roles and their associated permissions.
+ */
 @RequiredArgsConstructor
 public enum Role {
+    /** Admin role with full permissions. */
     ADMIN(Set.of(
             ADMIN_READ,
             ADMIN_CREATE,
@@ -22,6 +30,7 @@ public enum Role {
             USER_READ,
             USER_DELETE
     )),
+    /** Standard user role with user-level permissions. */
     USER(Set.of(
             USER_CREATE,
             USER_UPDATE,
@@ -32,6 +41,10 @@ public enum Role {
     @Getter
     private final Set<Permission> permissions;
 
+    /**
+     * Returns a list of granted authorities for the role, including permissions and role name.
+     * @return list of SimpleGrantedAuthority
+     */
     public List<SimpleGrantedAuthority> getUserAuthorities() {
         var authorities = getPermissions()
                 .stream()
