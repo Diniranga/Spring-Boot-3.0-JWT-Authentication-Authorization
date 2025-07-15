@@ -1,12 +1,17 @@
+/*
+ * AuthenticationService.java
+ *
+ * Service for handling user authentication, registration, password reset, and related security logic.
+ * Includes logic for login, registration, token validation, password reset, and session management.
+ */
 package com.ead.posgateway.Auth;
 
-import com.ead.posgateway.User.User;
-import com.ead.posgateway.dto.UserDto;
-import com.ead.posgateway.session.SessionService;
-import com.ead.posgateway.session.UserSession;
-import com.ead.posgateway.service.TokenService;
-import com.ead.posgateway.service.UserService;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -22,18 +27,23 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import com.ead.posgateway.User.User;
+import com.ead.posgateway.dto.UserDto;
+import com.ead.posgateway.session.SessionService;
+import com.ead.posgateway.session.UserSession;
+import com.ead.posgateway.service.TokenService;
+import com.ead.posgateway.service.UserService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
+/**
+ * Service for authentication, registration, password reset, and session management.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 @Transactional
 public class AuthenticationService {
+    private static final int DEFAULT_MAX_CONCURRENT_SESSIONS = 3;
 
     private final UserService userService;
     private final TokenService tokenService;
@@ -44,61 +54,49 @@ public class AuthenticationService {
 
     @Value("${spring.application.security.lockout.max-failed-attempts:5}")
     private int maxFailedAttempts;
-    
     @Value("${spring.application.security.lockout.cooldown-minutes:15}")
     private int cooldownMinutes;
-
     @Value("${spring.application.security.jwt.password-reset.token-expiration-minutes:30}")
     private int passwordResetTokenExpirationMinutes;
-
     @Value("${spring.application.frontend-base-url}")
     private String frontendBaseUrl;
-
     @Value("${spring.application.security.jwt.password-reset.rate-limit-minutes}")
     private int passwordResetRateLimitMinutes;
 
+    /**
+     * Register a new user and create an initial session and tokens.
+     * @param request registration request
+     * @param httpRequest HTTP request
+     * @return authentication response
+     */
     public AuthenticationResponse register(@Valid RegisterRequest request, HttpServletRequest httpRequest) {
-        // Check if user already exists
         if (userService.findByEmail(request.getEmail()).isPresent()) {
             throw new IllegalArgumentException("User with email " + request.getEmail() + " already exists");
         }
-
-        var user = User.builder()
+        User user = User.builder()
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
                 .email(request.getEmail())
-                .password(request.getPassword()) // Will be encoded in UserService
+                .password(request.getPassword())
                 .role(request.getRole())
                 .failedLoginAttempts(0)
                 .accountLocked(false)
                 .lockTime(null)
                 .activeSessions(0)
-                .maxConcurrentSessions(3)
+                .maxConcurrentSessions(DEFAULT_MAX_CONCURRENT_SESSIONS)
                 .lastPasswordChange(LocalDateTime.now())
                 .build();
-
-        var savedUser = userService.createUser(user);
-        
-        // Create session (this will reuse existing session if available)
+        User savedUser = userService.createUser(user);
         SessionService.SessionCreationResult sessionResult = sessionService.createSession(savedUser, httpRequest, UserSession.SessionType.WEB);
         UserSession userSession = sessionResult.getSession();
-        
         if (sessionResult.isWasReused()) {
-            // Revoke old tokens for this session
             tokenService.revokeTokensBySessionId(userSession.getSessionId());
             log.info("Revoked old tokens for reused session during registration: {}", userSession.getSessionId());
         }
-        
-        // Generate new tokens
-        var jwtToken = tokenService.generateAccessToken(savedUser);
-        var refreshToken = tokenService.generateRefreshToken(savedUser);
-        
-        // Create new token records
+        String jwtToken = tokenService.generateAccessToken(savedUser);
+        String refreshToken = tokenService.generateRefreshToken(savedUser);
         tokenService.createToken(savedUser, jwtToken, refreshToken, userSession.getSessionId());
-        
-        log.info("User registered successfully: {} with {} session", 
-                savedUser.getEmail(), sessionResult.isWasReused() ? "reused" : "new");
-        
+        log.info("User registered successfully: {} with {} session", savedUser.getEmail(), sessionResult.isWasReused() ? "reused" : "new");
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
                 .refreshToken(refreshToken)
@@ -108,19 +106,22 @@ public class AuthenticationService {
                 .build();
     }
 
+    /**
+     * Authenticate a user and create a session and tokens.
+     * @param request authentication request
+     * @param httpRequest HTTP request
+     * @return authentication response
+     */
     public AuthenticationResponse authenticate(@Valid AuthenticationRequest request, HttpServletRequest httpRequest) {
-        var userOpt = userService.findByEmail(request.getEmail());
+        Optional<User> userOpt = userService.findByEmail(request.getEmail());
         if (userOpt.isEmpty()) {
             throw new BadCredentialsException("Invalid email or password");
         }
-        var user = userOpt.get();
-
-        // Check if account is locked and if cooldown has expired
+        User user = userOpt.get();
         if (user.isAccountLocked()) {
             if (user.getLockTime() != null) {
-                long minutesSinceLock = ChronoUnit.MINUTES.between(user.getLockTime(), LocalDateTime.now());
+                long minutesSinceLock = java.time.temporal.ChronoUnit.MINUTES.between(user.getLockTime(), LocalDateTime.now());
                 if (minutesSinceLock >= cooldownMinutes) {
-                    // Unlock account
                     userService.resetFailedAttempts(user);
                 } else {
                     long remainingMinutes = cooldownMinutes - minutesSinceLock;
@@ -130,29 +131,18 @@ public class AuthenticationService {
                 throw new AccountLockedException("Account is locked. Contact administrator for assistance.");
             }
         }
-
         try {
-            // Authenticate the user
-            var authentication = authenticationManager.authenticate(
+            authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             request.getEmail(),
                             request.getPassword()
                     )
             );
-            
-            log.info("User authenticated successfully: {} with authorities: {}", 
-                    request.getEmail(), 
-                    authentication.getAuthorities());
-            
-            // Reset failed attempts on success
+            log.info("User authenticated successfully: {}", request.getEmail());
             userService.resetFailedAttempts(user);
             userService.updateLastLogin(user, getClientIpAddress(httpRequest));
-            
         } catch (BadCredentialsException ex) {
-            // Increment failed attempts
             userService.incrementFailedAttempts(user);
-            
-            // Check if account should be locked
             if (user.getFailedLoginAttempts() >= maxFailedAttempts) {
                 userService.lockAccount(user);
                 throw new AccountLockedException("Account is locked due to too many failed login attempts. Try again in " + cooldownMinutes + " minutes.", cooldownMinutes);
@@ -161,27 +151,16 @@ public class AuthenticationService {
                 throw new BadCredentialsException("Invalid email or password. Attempts left: " + remainingAttempts);
             }
         }
-
-        // Create session (this will reuse existing session if available)
         SessionService.SessionCreationResult sessionResult = sessionService.createSession(user, httpRequest, UserSession.SessionType.WEB);
         UserSession userSession = sessionResult.getSession();
-        
         if (sessionResult.isWasReused()) {
-            // Revoke old tokens for this session
             tokenService.revokeTokensBySessionId(userSession.getSessionId());
             log.info("Revoked old tokens for reused session: {}", userSession.getSessionId());
         }
-        
-        // Generate new tokens
-        var jwtToken = tokenService.generateAccessToken(user);
-        var refreshToken = tokenService.generateRefreshToken(user);
-        
-        // Create new token records
+        String jwtToken = tokenService.generateAccessToken(user);
+        String refreshToken = tokenService.generateRefreshToken(user);
         tokenService.createToken(user, jwtToken, refreshToken, userSession.getSessionId());
-        
-        log.info("User logged in successfully: {} with {} session", 
-                user.getEmail(), sessionResult.isWasReused() ? "reused" : "new");
-        
+        log.info("User logged in successfully: {} with {} session", user.getEmail(), sessionResult.isWasReused() ? "reused" : "new");
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
                 .refreshToken(refreshToken)
@@ -191,56 +170,53 @@ public class AuthenticationService {
                 .build();
     }
 
+    /**
+     * Validate a JWT token and session for a user.
+     * @param token JWT token
+     * @param userEmail user email
+     * @param request HTTP request
+     * @return true if valid, false otherwise
+     */
     public boolean validateToken(String token, String userEmail, HttpServletRequest request) {
-        // First validate session
         if (!sessionService.validateSessionByToken(token, request)) {
             return false;
         }
-        
         UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
         return tokenService.isTokenValid(token, userDetails);
     }
 
+    /**
+     * Refresh JWT tokens using a valid refresh token.
+     * @param request HTTP request
+     * @param response HTTP response
+     * @throws IOException if writing to response fails
+     */
     public void refreshToken(HttpServletRequest request, HttpServletResponse response) throws IOException {
         final String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
         final String oldRefreshToken;
         final String userEmail;
-        
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             response.setStatus(401);
             response.getWriter().write("{\"error\":\"No refresh token provided\"}");
             return;
         }
-        
         oldRefreshToken = authHeader.substring(7);
         userEmail = tokenService.extractUserEmail(oldRefreshToken);
-        
         if (userEmail != null) {
-            var userOpt = userService.findByEmail(userEmail);
+            Optional<User> userOpt = userService.findByEmail(userEmail);
             if (userOpt.isPresent()) {
-                var user = userOpt.get();
-                
-                // Validate old refresh token
-                if (tokenService.isTokenValid(oldRefreshToken, user) && 
-                    sessionService.validateSession(oldRefreshToken, request)) {
-                    
-                    // Revoke the old session
+                User user = userOpt.get();
+                if (tokenService.isTokenValid(oldRefreshToken, user) && sessionService.validateSession(oldRefreshToken, request)) {
                     sessionService.invalidateSessionByToken(oldRefreshToken, "Token refresh");
-                    
-                    // Issue new tokens
-                    var accessToken = tokenService.generateAccessToken(user);
-                    var newRefreshToken = tokenService.generateRefreshToken(user);
-                    
-                    // Create new session with both tokens
+                    String accessToken = tokenService.generateAccessToken(user);
+                    String newRefreshToken = tokenService.generateRefreshToken(user);
                     SessionService.SessionCreationResult sessionResult = sessionService.createSession(user, request, UserSession.SessionType.WEB);
                     UserSession userSession = sessionResult.getSession();
                     tokenService.createToken(user, accessToken, newRefreshToken, userSession.getSessionId());
-                    
-                    var authResponse = AuthenticationResponse.builder()
+                    AuthenticationResponse authResponse = AuthenticationResponse.builder()
                             .accessToken(accessToken)
                             .refreshToken(newRefreshToken)
                             .build();
-                    
                     new ObjectMapper().writeValue(response.getOutputStream(), authResponse);
                     log.info("Token refreshed for user: {}", userEmail);
                 } else {
@@ -257,29 +233,43 @@ public class AuthenticationService {
         }
     }
 
+    /**
+     * Change the password for an authenticated user.
+     * @param userEmail user email
+     * @param oldPassword old password
+     * @param newPassword new password
+     * @return true if changed, false if old password is incorrect
+     */
     public boolean changePassword(String userEmail, String oldPassword, String newPassword) {
         User user = userService.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        // Check old password
         if (!userService.matchesPassword(user, oldPassword)) {
             return false;
         }
         userService.changePassword(user, newPassword);
-        // Invalidate all sessions for security
         sessionService.invalidateAllSessions(user, "Password change");
         tokenService.revokeAllUserTokens(user);
         log.info("Password changed for user: {}. All sessions invalidated.", userEmail);
         return true;
     }
 
+    /**
+     * Get account status for a user by email.
+     * @param email user email
+     * @return user DTO
+     */
     public UserDto getAccountStatus(String email) {
-        var userOpt = userService.findByEmail(email);
+        Optional<User> userOpt = userService.findByEmail(email);
         if (userOpt.isEmpty()) {
             throw new IllegalArgumentException("Account not found");
         }
         return userService.getUserDto(userOpt.get());
     }
 
+    /**
+     * Request a password reset (generates and logs a reset link).
+     * @param email user email
+     */
     public void requestPasswordReset(String email) {
         Optional<User> userOpt = userService.findByEmail(email);
         if (userOpt.isEmpty()) {
@@ -287,7 +277,6 @@ public class AuthenticationService {
             return;
         }
         User user = userOpt.get();
-        // Rate limiting: allow only 3 requests per configured window
         LocalDateTime windowStart = LocalDateTime.now().minusMinutes(passwordResetRateLimitMinutes);
         List<PasswordResetToken> tokens = passwordResetTokenRepository.findByUserId(Long.valueOf(user.getId()));
         long recentRequests = tokens.stream()
@@ -296,14 +285,12 @@ public class AuthenticationService {
         if (recentRequests >= 3) {
             throw new IllegalStateException("Too many password reset requests. Please wait " + passwordResetRateLimitMinutes + " minutes before trying again.");
         }
-        // Revoke all previous tokens (do not set used=true unless actually used)
         for (PasswordResetToken token : tokens) {
             if (!token.isRevoked() && (!token.isUsed() || token.getExpiryDate().isBefore(LocalDateTime.now()))) {
                 token.setRevoked(true);
             }
         }
         passwordResetTokenRepository.saveAll(tokens);
-        // Generate token
         String token = UUID.randomUUID().toString();
         LocalDateTime expiry = LocalDateTime.now().plusMinutes(passwordResetTokenExpirationMinutes);
         PasswordResetToken resetToken = new PasswordResetToken(token, user, expiry);
@@ -312,6 +299,11 @@ public class AuthenticationService {
         log.info("Password reset link for {}: {} (expires in {} minutes)", email, resetLink, passwordResetTokenExpirationMinutes);
     }
 
+    /**
+     * Reset the user's password using a valid reset token.
+     * @param token reset token
+     * @param newPassword new password
+     */
     public void resetPassword(String token, String newPassword) {
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token);
         if (resetToken == null || resetToken.isUsed() || resetToken.isRevoked() || resetToken.getExpiryDate().isBefore(LocalDateTime.now())) {
@@ -323,23 +315,25 @@ public class AuthenticationService {
         resetToken.setUsed(true);
         resetToken.setRevoked(true);
         passwordResetTokenRepository.save(resetToken);
-        // Invalidate all sessions and tokens for security
         sessionService.invalidateAllSessions(user, "Password reset");
         tokenService.revokeAllUserTokens(user);
         log.info("Password reset for user: {}. All sessions invalidated.", user.getEmail());
     }
 
+    /**
+     * Extract client IP address from request headers.
+     * @param request HTTP request
+     * @return client IP address
+     */
     private String getClientIpAddress(HttpServletRequest request) {
         String xForwardedFor = request.getHeader("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
             return xForwardedFor.split(",")[0].trim();
         }
-        
         String xRealIp = request.getHeader("X-Real-IP");
         if (xRealIp != null && !xRealIp.isEmpty()) {
             return xRealIp;
         }
-        
         return request.getRemoteAddr();
     }
 }

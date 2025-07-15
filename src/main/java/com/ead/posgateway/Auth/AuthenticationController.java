@@ -1,13 +1,16 @@
+/*
+ * AuthenticationController.java
+ *
+ * REST controller for authentication, registration, password reset, session management, and security endpoints.
+ * Handles user login, registration, token validation, password reset, session operations, and security statistics.
+ */
 package com.ead.posgateway.Auth;
 
-import com.ead.posgateway.Config.SecurityContextUtils;
-import com.ead.posgateway.Auth.LogoutService;
-import com.ead.posgateway.Auth.ChangePasswordRequest;
-import com.ead.posgateway.User.User;
-import com.ead.posgateway.dto.SessionDto;
-import com.ead.posgateway.dto.UserDto;
-import com.ead.posgateway.session.SessionService;
-import com.ead.posgateway.service.UserService;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -17,25 +20,28 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
+import com.ead.posgateway.Config.SecurityContextUtils;
+import com.ead.posgateway.dto.SessionDto;
+import com.ead.posgateway.dto.UserDto;
+import com.ead.posgateway.session.SessionService;
+import com.ead.posgateway.service.UserService;
 
+/**
+ * REST controller for authentication, registration, password reset, session management, and security endpoints.
+ */
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
 @Slf4j
 public class AuthenticationController {
-
     private final AuthenticationService service;
     private final LogoutService logoutService;
     private final SessionService sessionService;
     private final UserService userService;
 
+    /**
+     * Register a new user.
+     */
     @PostMapping("/register")
     public ResponseEntity<AuthenticationResponse> register(
             @Valid @RequestBody RegisterRequest request,
@@ -45,6 +51,9 @@ public class AuthenticationController {
         return ResponseEntity.ok(service.register(request, httpRequest));
     }
 
+    /**
+     * Login endpoint.
+     */
     @PostMapping("/login")
     public ResponseEntity<AuthenticationResponse> login(
             @Valid @RequestBody AuthenticationRequest request,
@@ -54,6 +63,9 @@ public class AuthenticationController {
         return ResponseEntity.ok(service.authenticate(request, httpRequest));
     }
 
+    /**
+     * Refresh JWT tokens.
+     */
     @PostMapping("/refresh-token")
     public void refreshToken(
             HttpServletRequest request,
@@ -62,6 +74,9 @@ public class AuthenticationController {
         service.refreshToken(request, response);
     }
 
+    /**
+     * Validate a JWT token.
+     */
     @PostMapping("/validateToken")
     public ResponseEntity<Map<String, Object>> validateToken(
             @Valid @RequestBody TokenValidationRequest tokenValidationRequest,
@@ -74,11 +89,13 @@ public class AuthenticationController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Get the current security context.
+     */
     @PostMapping("/security-context")
     public ResponseEntity<Map<String, Object>> getSecurityContext() {
         Authentication authentication = SecurityContextUtils.getCurrentAuthentication();
         Map<String, Object> contextInfo = new HashMap<>();
-        
         if (authentication != null && authentication.isAuthenticated()) {
             contextInfo.put("authenticated", true);
             contextInfo.put("principal", authentication.getPrincipal());
@@ -87,14 +104,15 @@ public class AuthenticationController {
         } else {
             contextInfo.put("authenticated", false);
         }
-        
         return ResponseEntity.ok(contextInfo);
     }
 
+    /**
+     * Verify if the user is authenticated.
+     */
     @PostMapping("/verify-authentication")
     public ResponseEntity<Map<String, Object>> verifyAuthentication() {
         Map<String, Object> response = new HashMap<>();
-        
         if (SecurityContextUtils.isAuthenticated()) {
             response.put("authenticated", true);
             response.put("userEmail", SecurityContextUtils.getCurrentUserEmail());
@@ -104,14 +122,15 @@ public class AuthenticationController {
             response.put("authenticated", false);
             response.put("message", "User is not authenticated");
         }
-        
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Logout from the current session.
+     */
     @PostMapping("/logout")
     public ResponseEntity<Map<String, String>> logout(@RequestHeader("Authorization") String authHeader) {
         Map<String, String> response = new HashMap<>();
-        
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
             logoutService.logout(token);
@@ -120,14 +139,15 @@ public class AuthenticationController {
         } else {
             response.put("message", "No token provided");
         }
-        
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Logout from all sessions.
+     */
     @PostMapping("/logout-all")
     public ResponseEntity<Map<String, String>> logoutAllSessions() {
         Map<String, String> response = new HashMap<>();
-        
         String userEmail = SecurityContextUtils.getCurrentUserEmail();
         if (userEmail != null) {
             logoutService.logoutAllSessions(userEmail);
@@ -136,16 +156,21 @@ public class AuthenticationController {
         } else {
             response.put("message", "User not authenticated");
         }
-        
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Get account status for a user.
+     */
     @PostMapping("/account-status")
     public ResponseEntity<UserDto> getAccountStatus(@Valid @RequestBody AuthenticationRequest request) {
         UserDto userDto = service.getAccountStatus(request.getEmail());
         return ResponseEntity.ok(userDto);
     }
 
+    /**
+     * Request a password reset (forgot password).
+     */
     @PostMapping("/forgot-password-reset")
     public ResponseEntity<Map<String, String>> forgotPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
         service.requestPasswordReset(request.getEmail());
@@ -154,6 +179,9 @@ public class AuthenticationController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Reset password using a reset token.
+     */
     @PostMapping("/reset-password")
     public ResponseEntity<Map<String, String>> resetPassword(@Valid @RequestBody PasswordResetSubmitRequest request) {
         service.resetPassword(request.getToken(), request.getNewPassword());
@@ -162,82 +190,71 @@ public class AuthenticationController {
         return ResponseEntity.ok(response);
     }
 
-    // Session management endpoints
-
+    /**
+     * Get active sessions for the current user.
+     */
     @GetMapping("/sessions")
     public ResponseEntity<Map<String, Object>> getActiveSessions() {
         Map<String, Object> response = new HashMap<>();
-        
         String userEmail = SecurityContextUtils.getCurrentUserEmail();
         if (userEmail != null) {
-            var userOpt = userService.findByEmail(userEmail);
-            if (userOpt.isPresent()) {
-                User user = userOpt.get();
+            userService.findByEmail(userEmail).ifPresentOrElse(user -> {
                 var activeSessions = sessionService.getActiveSessions(user);
-                
                 response.put("userEmail", userEmail);
                 response.put("activeSessions", activeSessions.size());
                 response.put("maxConcurrentSessions", user.getMaxConcurrentSessions());
-                response.put("sessions", activeSessions.stream()
-                        .map(SessionDto::fromUserSession)
-                        .collect(Collectors.toList()));
+                response.put("sessions", activeSessions.stream().map(SessionDto::fromUserSession).collect(Collectors.toList()));
                 response.put("message", "Active sessions retrieved");
-            } else {
-                response.put("message", "User not found");
-            }
+            }, () -> response.put("message", "User not found"));
         } else {
             response.put("message", "User not authenticated");
         }
-        
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Get all sessions for the current user.
+     */
     @GetMapping("/sessions/all")
     public ResponseEntity<Map<String, Object>> getAllSessions() {
         Map<String, Object> response = new HashMap<>();
-        
         String userEmail = SecurityContextUtils.getCurrentUserEmail();
         if (userEmail != null) {
-            var userOpt = userService.findByEmail(userEmail);
-            if (userOpt.isPresent()) {
-                User user = userOpt.get();
+            userService.findByEmail(userEmail).ifPresentOrElse(user -> {
                 var allSessions = sessionService.getAllSessions(user);
-                
                 response.put("userEmail", userEmail);
                 response.put("totalSessions", allSessions.size());
-                response.put("sessions", allSessions.stream()
-                        .map(SessionDto::fromUserSession)
-                        .collect(Collectors.toList()));
+                response.put("sessions", allSessions.stream().map(SessionDto::fromUserSession).collect(Collectors.toList()));
                 response.put("message", "All sessions retrieved");
-            } else {
-                response.put("message", "User not found");
-            }
+            }, () -> response.put("message", "User not found"));
         } else {
             response.put("message", "User not authenticated");
         }
-        
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Extend a session by session ID.
+     */
     @PostMapping("/sessions/{sessionId}/extend")
     public ResponseEntity<Map<String, String>> extendSession(
             @PathVariable String sessionId,
             @RequestBody Map<String, Integer> request
     ) {
         Map<String, String> response = new HashMap<>();
-        
         Integer additionalMinutes = request.get("additionalMinutes");
         if (additionalMinutes == null || additionalMinutes <= 0) {
             response.put("message", "Invalid additional minutes value");
             return ResponseEntity.badRequest().body(response);
         }
-        
         sessionService.extendSession(sessionId, additionalMinutes);
         response.put("message", "Session extended successfully");
-        
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Change password for the current user.
+     */
     @PostMapping("/change-password")
     public ResponseEntity<Map<String, String>> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         Map<String, String> response = new HashMap<>();
@@ -256,60 +273,54 @@ public class AuthenticationController {
         }
     }
 
+    /**
+     * Cleanup expired sessions for the current user.
+     */
     @PostMapping("/cleanup-sessions")
     public ResponseEntity<Map<String, String>> cleanupExpiredSessions() {
         Map<String, String> response = new HashMap<>();
-        
         sessionService.cleanupExpiredSessions();
         response.put("message", "Expired sessions cleaned up successfully");
-        
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Get security statistics for the current user.
+     */
     @GetMapping("/security/statistics")
     public ResponseEntity<Map<String, Object>> getSecurityStatistics() {
         Map<String, Object> response = new HashMap<>();
-        
         String userEmail = SecurityContextUtils.getCurrentUserEmail();
         if (userEmail != null) {
-            var userOpt = userService.findByEmail(userEmail);
-            if (userOpt.isPresent()) {
-                User user = userOpt.get();
+            userService.findByEmail(userEmail).ifPresentOrElse(user -> {
                 UserDto userDto = userService.getUserDto(user);
-                
                 response.put("userEmail", userEmail);
                 response.put("accountStatus", userDto);
                 response.put("activeSessions", sessionService.getActiveSessions(user).size());
                 response.put("totalSessions", sessionService.getAllSessions(user).size());
                 response.put("message", "Security statistics retrieved");
-            } else {
-                response.put("message", "User not found");
-            }
+            }, () -> response.put("message", "User not found"));
         } else {
             response.put("message", "User not authenticated");
         }
-        
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Reset security counters for the current user.
+     */
     @PostMapping("/security/reset-counters")
     public ResponseEntity<Map<String, String>> resetSecurityCounters(@RequestBody Map<String, String> request) {
         Map<String, String> response = new HashMap<>();
-        
         String userEmail = SecurityContextUtils.getCurrentUserEmail();
         if (userEmail != null) {
-            var userOpt = userService.findByEmail(userEmail);
-            if (userOpt.isPresent()) {
-                User user = userOpt.get();
+            userService.findByEmail(userEmail).ifPresentOrElse(user -> {
                 userService.resetFailedAttempts(user);
                 response.put("message", "Security counters reset successfully");
-            } else {
-                response.put("message", "User not found");
-            }
+            }, () -> response.put("message", "User not found"));
         } else {
             response.put("message", "User not authenticated");
         }
-        
         return ResponseEntity.ok(response);
     }
 }
