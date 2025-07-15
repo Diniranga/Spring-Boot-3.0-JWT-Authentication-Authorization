@@ -80,6 +80,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(response);
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalStateException(IllegalStateException ex) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("timestamp", LocalDateTime.now());
+        response.put("status", 429);
+        response.put("error", "Too Many Requests");
+        response.put("message", ex.getMessage());
+        return ResponseEntity.status(429).body(response);
+    }
+
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<?> handleMissingRequestHeader(MissingRequestHeaderException ex) {
         String headerName = ex.getHeaderName();

@@ -1,6 +1,6 @@
 spring:
   profiles:
-    active: prod
+    active: dev
   datasource:
     url: mysql://turntable.proxy.rlwy.net:31212/railway
     username: root
@@ -16,6 +16,7 @@ spring:
     database-platform: org.hibernate.dialect.MySQLDialect
 
   application:
+    frontend-base-url: https://33bf19ba2d9e.ngrok-free.app
     security:
       jwt:
         expiration: 86400000
@@ -23,6 +24,9 @@ spring:
           expiration: 604800000 #7 days
         audience: pos-gateway-app
         issuer: pos-gateway
+        password-reset:
+          token-expiration-minutes: 30
+          rate-limit-minutes: 1
       https:
         enabled: false
         redirect-http: true

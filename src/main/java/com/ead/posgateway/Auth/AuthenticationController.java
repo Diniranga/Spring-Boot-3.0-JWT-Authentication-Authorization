@@ -145,6 +145,22 @@ public class AuthenticationController {
         return ResponseEntity.ok(userDto);
     }
 
+    @PostMapping("/request-password-reset")
+    public ResponseEntity<Map<String, String>> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
+        service.requestPasswordReset(request.getEmail());
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "If the email exists, a password reset link has been sent.");
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, String>> resetPassword(@Valid @RequestBody PasswordResetSubmitRequest request) {
+        service.resetPassword(request.getToken(), request.getNewPassword());
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Password has been reset successfully.");
+        return ResponseEntity.ok(response);
+    }
+
     // Session management endpoints
 
     @GetMapping("/sessions")

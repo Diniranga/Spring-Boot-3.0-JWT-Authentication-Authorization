@@ -25,6 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -37,12 +40,22 @@ public class AuthenticationService {
     private final SessionService sessionService;
     private final AuthenticationManager authenticationManager;
     private final UserDetailsService userDetailsService;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
 
     @Value("${spring.application.security.lockout.max-failed-attempts:5}")
     private int maxFailedAttempts;
     
     @Value("${spring.application.security.lockout.cooldown-minutes:15}")
     private int cooldownMinutes;
+
+    @Value("${spring.application.security.jwt.password-reset.token-expiration-minutes:30}")
+    private int passwordResetTokenExpirationMinutes;
+
+    @Value("${spring.application.frontend-base-url}")
+    private String frontendBaseUrl;
+
+    @Value("${spring.application.security.jwt.password-reset.rate-limit-minutes}")
+    private int passwordResetRateLimitMinutes;
 
     public AuthenticationResponse register(@Valid RegisterRequest request, HttpServletRequest httpRequest) {
         // Check if user already exists
@@ -263,6 +276,55 @@ public class AuthenticationService {
             throw new IllegalArgumentException("Account not found");
         }
         return userService.getUserDto(userOpt.get());
+    }
+
+    public void requestPasswordReset(String email) {
+        Optional<User> userOpt = userService.findByEmail(email);
+        if (userOpt.isEmpty()) {
+            log.info("Password reset requested for non-existent email: {}", email);
+            return;
+        }
+        User user = userOpt.get();
+        // Rate limiting: allow only 3 requests per configured window
+        LocalDateTime windowStart = LocalDateTime.now().minusMinutes(passwordResetRateLimitMinutes);
+        List<PasswordResetToken> tokens = passwordResetTokenRepository.findByUserId(Long.valueOf(user.getId()));
+        long recentRequests = tokens.stream()
+            .filter(t -> t.getCreatedAt() != null && t.getCreatedAt().isAfter(windowStart))
+            .count();
+        if (recentRequests >= 3) {
+            throw new IllegalStateException("Too many password reset requests. Please wait " + passwordResetRateLimitMinutes + " minutes before trying again.");
+        }
+        // Revoke all previous tokens (do not set used=true unless actually used)
+        for (PasswordResetToken token : tokens) {
+            if (!token.isRevoked() && (!token.isUsed() || token.getExpiryDate().isBefore(LocalDateTime.now()))) {
+                token.setRevoked(true);
+            }
+        }
+        passwordResetTokenRepository.saveAll(tokens);
+        // Generate token
+        String token = UUID.randomUUID().toString();
+        LocalDateTime expiry = LocalDateTime.now().plusMinutes(passwordResetTokenExpirationMinutes);
+        PasswordResetToken resetToken = new PasswordResetToken(token, user, expiry);
+        passwordResetTokenRepository.save(resetToken);
+        String resetLink = String.format("%s/reset-password?token=%s", frontendBaseUrl, token);
+        log.info("Password reset link for {}: {} (expires in {} minutes)", email, resetLink, passwordResetTokenExpirationMinutes);
+    }
+
+    public void resetPassword(String token, String newPassword) {
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token);
+        if (resetToken == null || resetToken.isUsed() || resetToken.isRevoked() || resetToken.getExpiryDate().isBefore(LocalDateTime.now())) {
+            if (resetToken != null) resetToken.setRevoked(true);
+            throw new IllegalArgumentException("Invalid or expired password reset token");
+        }
+        User user = resetToken.getUser();
+        userService.changePassword(user, newPassword);
+        resetToken.setUsed(true);
+        resetToken.setRevoked(true);
+        passwordResetTokenRepository.save(resetToken);
+        // Invalidate all sessions and tokens for security
+        sessionService.invalidateAllSessions(user, "Password reset");
+        tokenService.revokeAllUserTokens(user);
+        log.info("Password reset for user: {}. All sessions invalidated.", user.getEmail());
     }
 
     private String getClientIpAddress(HttpServletRequest request) {
