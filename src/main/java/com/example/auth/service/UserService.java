@@ -132,6 +132,7 @@ public class UserService {
      * Locks the user's account and sets the lock time.
      * @param user User entity
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void lockAccount(final User user) {
         user.setAccountLocked(true);
         user.setLockTime(LocalDateTime.now());
