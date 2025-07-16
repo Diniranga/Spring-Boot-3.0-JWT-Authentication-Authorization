@@ -126,24 +126,6 @@ public class AuthenticationController {
     }
 
     /**
-     * Verify if the user is authenticated.
-     */
-    @PostMapping("/verify-authentication")
-    public ResponseEntity<Map<String, Object>> verifyAuthentication() {
-        Map<String, Object> response = new HashMap<>();
-        if (SecurityContextUtils.isAuthenticated()) {
-            response.put("authenticated", true);
-            response.put("userEmail", SecurityContextUtils.getCurrentUserEmail());
-            response.put("authorities", SecurityContextUtils.getCurrentAuthentication().getAuthorities());
-            response.put("message", "User is authenticated");
-        } else {
-            response.put("authenticated", false);
-            response.put("message", "User is not authenticated");
-        }
-        return ResponseEntity.ok(response);
-    }
-
-    /**
      * Logout from the current session.
      */
     @PostMapping("/logout")
