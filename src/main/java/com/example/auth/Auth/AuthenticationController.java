@@ -98,7 +98,25 @@ public class AuthenticationController {
         Map<String, Object> contextInfo = new HashMap<>();
         if (authentication != null && authentication.isAuthenticated()) {
             contextInfo.put("authenticated", true);
-            contextInfo.put("principal", authentication.getPrincipal());
+            Object principal = authentication.getPrincipal();
+            if (principal instanceof com.example.auth.User.User user) {
+                // Map User entity to UserDto
+                UserDto userDto = UserDto.builder()
+                        .id(user.getId())
+                        .firstName(user.getFirstName())
+                        .lastName(user.getLastName())
+                        .email(user.getEmail())
+                        .role(user.getRole())
+                        .lastLoginTime(user.getLastLoginTime())
+                        .lastLoginIp(user.getLastLoginIp())
+                        .accountLocked(user.isAccountLocked())
+                        .activeSessions(user.getActiveSessions())
+                        .maxConcurrentSessions(user.getMaxConcurrentSessions())
+                        .build();
+                contextInfo.put("principal", userDto);
+            } else {
+                contextInfo.put("principal", principal);
+            }
             contextInfo.put("authorities", authentication.getAuthorities());
             contextInfo.put("details", authentication.getDetails());
         } else {
