@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -120,6 +121,7 @@ public class UserService {
      * Increments the failed login attempts counter for a user.
      * @param user User entity
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void incrementFailedAttempts(final User user) {
         int attempts = user.getFailedLoginAttempts() + 1;
         user.setFailedLoginAttempts(attempts);

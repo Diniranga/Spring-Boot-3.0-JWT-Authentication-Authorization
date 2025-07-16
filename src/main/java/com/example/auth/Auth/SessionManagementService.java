@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.example.auth.User.User;
 import com.example.auth.User.UserRepository;
@@ -30,6 +31,7 @@ import jakarta.servlet.http.HttpServletRequest;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Transactional
 public class SessionManagementService {
     private final TokenRepository tokenRepository;
     private final UserRepository userRepository;

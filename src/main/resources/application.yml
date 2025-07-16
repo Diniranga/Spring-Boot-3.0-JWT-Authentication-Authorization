@@ -34,7 +34,9 @@ spring:
         hsts-max-age: 31536000 # 1 year
       lockout:
         max-failed-attempts: 5
-        cooldown-minutes: 15
+        cooldown-minutes: 1
+        suspicious-login-threshold: 3
+        high-suspicious-activity-threshold: 5
       session:
         max-concurrent-sessions: 3
         session-timeout-minutes: 30

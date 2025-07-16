@@ -9,6 +9,7 @@ package com.example.auth.Auth;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.example.auth.Config.SecurityContextUtils;
 import com.example.auth.User.User;
@@ -20,6 +21,7 @@ import com.example.auth.User.UserRepository;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Transactional
 public class LogoutService {
     private final SessionManagementService sessionManagementService;
     private final UserRepository userRepository;

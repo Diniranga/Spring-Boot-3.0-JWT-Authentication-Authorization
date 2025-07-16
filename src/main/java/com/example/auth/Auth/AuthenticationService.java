@@ -33,6 +33,7 @@ import com.example.auth.session.SessionService;
 import com.example.auth.session.UserSession;
 import com.example.auth.service.TokenService;
 import com.example.auth.service.UserService;
+import com.example.auth.Auth.SecurityMonitoringService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
@@ -51,6 +52,7 @@ public class AuthenticationService {
     private final AuthenticationManager authenticationManager;
     private final UserDetailsService userDetailsService;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final SecurityMonitoringService securityMonitoringService;
 
     @Value("${spring.application.security.lockout.max-failed-attempts:5}")
     private int maxFailedAttempts;
@@ -118,11 +120,14 @@ public class AuthenticationService {
             throw new BadCredentialsException("Invalid email or password");
         }
         User user = userOpt.get();
+
+        // CHECK LOCK FIRST!
         if (user.isAccountLocked()) {
             if (user.getLockTime() != null) {
                 long minutesSinceLock = java.time.temporal.ChronoUnit.MINUTES.between(user.getLockTime(), LocalDateTime.now());
                 if (minutesSinceLock >= cooldownMinutes) {
                     userService.resetFailedAttempts(user);
+                    securityMonitoringService.trackAccountUnlocked(user.getEmail(), getClientIpAddress(httpRequest), "Cooldown expired");
                 } else {
                     long remainingMinutes = cooldownMinutes - minutesSinceLock;
                     throw new AccountLockedException("Account is locked due to too many failed login attempts. Try again in " + remainingMinutes + " minutes.", remainingMinutes);
@@ -131,6 +136,8 @@ public class AuthenticationService {
                 throw new AccountLockedException("Account is locked. Contact administrator for assistance.");
             }
         }
+
+        // Only now authenticate
         try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
@@ -141,13 +148,24 @@ public class AuthenticationService {
             log.info("User authenticated successfully: {}", request.getEmail());
             userService.resetFailedAttempts(user);
             userService.updateLastLogin(user, getClientIpAddress(httpRequest));
+            securityMonitoringService.trackAccountUnlocked(user.getEmail(), getClientIpAddress(httpRequest), "Successful login");
         } catch (BadCredentialsException ex) {
             userService.incrementFailedAttempts(user);
-            if (user.getFailedLoginAttempts() >= maxFailedAttempts) {
+            int attempts = user.getFailedLoginAttempts();
+            boolean willLock = attempts >= maxFailedAttempts;
+            boolean isLocked = user.isAccountLocked() || willLock;
+            securityMonitoringService.trackFailedLoginWithLockCheck(
+                user.getEmail(),
+                getClientIpAddress(httpRequest),
+                attempts,
+                maxFailedAttempts,
+                willLock
+            );
+            if (willLock) {
                 userService.lockAccount(user);
                 throw new AccountLockedException("Account is locked due to too many failed login attempts. Try again in " + cooldownMinutes + " minutes.", cooldownMinutes);
             } else {
-                int remainingAttempts = maxFailedAttempts - user.getFailedLoginAttempts();
+                int remainingAttempts = maxFailedAttempts - attempts;
                 throw new BadCredentialsException("Invalid email or password. Attempts left: " + remainingAttempts);
             }
         }
