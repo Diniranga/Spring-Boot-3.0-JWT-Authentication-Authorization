@@ -148,7 +148,6 @@ public class AuthenticationService {
             log.info("User authenticated successfully: {}", request.getEmail());
             userService.resetFailedAttempts(user);
             userService.updateLastLogin(user, getClientIpAddress(httpRequest));
-            securityMonitoringService.trackAccountUnlocked(user.getEmail(), getClientIpAddress(httpRequest), "Successful login");
         } catch (BadCredentialsException ex) {
             userService.incrementFailedAttempts(user);
             int attempts = user.getFailedLoginAttempts();
