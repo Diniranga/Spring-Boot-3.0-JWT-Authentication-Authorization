@@ -210,20 +210,27 @@ public class AuthenticationService {
      */
     public void refreshToken(HttpServletRequest request, HttpServletResponse response) throws IOException {
         final String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
+        log.info("Authorization header: {}", authHeader);
         final String oldRefreshToken;
         final String userEmail;
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            log.warn("No refresh token provided in Authorization header");
             response.setStatus(401);
             response.getWriter().write("{\"error\":\"No refresh token provided\"}");
             return;
         }
         oldRefreshToken = authHeader.substring(7);
+        log.info("Extracted refresh token: {}", oldRefreshToken);
         userEmail = tokenService.extractUserEmail(oldRefreshToken);
+        log.info("Extracted userEmail from refresh token: {}", userEmail);
         if (userEmail != null) {
             Optional<User> userOpt = userService.findByEmail(userEmail);
             if (userOpt.isPresent()) {
                 User user = userOpt.get();
-                if (tokenService.isTokenValid(oldRefreshToken, user) && sessionService.validateSession(oldRefreshToken, request)) {
+                boolean tokenValid = tokenService.isTokenValid(oldRefreshToken, user);
+                boolean sessionValid = sessionService.validateSessionByToken(oldRefreshToken, request);
+                log.info("Token valid: {}, Session valid: {}", tokenValid, sessionValid);
+                if (tokenValid && sessionValid) {
                     sessionService.invalidateSessionByToken(oldRefreshToken, "Token refresh");
                     String accessToken = tokenService.generateAccessToken(user);
                     String newRefreshToken = tokenService.generateRefreshToken(user);
@@ -237,14 +244,17 @@ public class AuthenticationService {
                     new ObjectMapper().writeValue(response.getOutputStream(), authResponse);
                     log.info("Token refreshed for user: {}", userEmail);
                 } else {
+                    log.warn("Invalid refresh token or session");
                     response.setStatus(401);
                     response.getWriter().write("{\"error\":\"Invalid refresh token\"}");
                 }
             } else {
+                log.warn("User not found for email: {}", userEmail);
                 response.setStatus(401);
                 response.getWriter().write("{\"error\":\"User not found\"}");
             }
         } else {
+            log.warn("Could not extract user email from refresh token");
             response.setStatus(401);
             response.getWriter().write("{\"error\":\"Invalid refresh token\"}");
         }

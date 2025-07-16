@@ -153,15 +153,20 @@ public class SessionService {
      * Validate session and update last used time
      */
     public boolean validateSession(String sessionId, HttpServletRequest request) {
+
         Optional<UserSession> sessionOpt = userSessionRepository.findBySessionId(sessionId);
         if (sessionOpt.isEmpty()) {
+            log.warn("Session not found for sessionId: {}", sessionId);
             return false;
         }
 
         UserSession session = sessionOpt.get();
-        
+        log.info("Validating session: id={}, isActive={}, isRevoked={}, expiresAt={}, now={}, deviceFingerprint={}",
+            session.getSessionId(), session.isActive(), session.isRevoked(), session.getExpiresAt(), LocalDateTime.now(), session.getDeviceFingerprint());
         // Check if session is valid
         if (!session.isValid()) {
+            log.warn("Session is not valid: id={}, isActive={}, isRevoked={}, expiresAt={}, now={}",
+                session.getSessionId(), session.isActive(), session.isRevoked(), session.getExpiresAt(), LocalDateTime.now());
             securityMonitoringService.trackSessionAnomaly(
                 session.getUser().getEmail(), 
                 session.getSessionId(), 
@@ -173,16 +178,15 @@ public class SessionService {
 
         // Check if session is expired
         if (session.isExpired()) {
+            log.warn("Session is expired: id={}, expiresAt={}, now={}", session.getSessionId(), session.getExpiresAt(), LocalDateTime.now());
             session.setIsActive(false);
             userSessionRepository.save(session);
-            
             securityMonitoringService.trackSessionAnomaly(
                 session.getUser().getEmail(), 
                 session.getSessionId(), 
                 getClientIpAddress(request), 
                 "Session expired"
             );
-            
             log.info("Session expired for user: {}", session.getUser().getEmail());
             return false;
         }
@@ -191,6 +195,7 @@ public class SessionService {
         if (session.getDeviceFingerprint() != null) {
             String currentFingerprint = generateDeviceFingerprint(request);
             if (!session.getDeviceFingerprint().equals(currentFingerprint)) {
+                log.warn("Device fingerprint mismatch: expected={}, actual={}", session.getDeviceFingerprint(), currentFingerprint);
                 securityMonitoringService.trackDeviceFingerprintMismatch(
                     session.getUser().getEmail(),
                     session.getDeviceFingerprint(),
@@ -205,7 +210,7 @@ public class SessionService {
         // Update last used time and extend session if needed
         session.updateLastUsed();
         userSessionRepository.save(session);
-
+        log.info("Session validated successfully: id={}, user={}", session.getSessionId(), session.getUser().getEmail());
         return true;
     }
 
@@ -329,21 +334,19 @@ public class SessionService {
             log.warn("Token not found for session validation: {}", tokenValue);
             return false;
         }
-        
         Token tokenEntity = tokenOpt.get();
-        
+        log.info("Validating token: id={}, isExpired={}, isRevoked={}, sessionId={}",
+            tokenEntity.getId(), tokenEntity.isExpired(), tokenEntity.isRevoked(), tokenEntity.getSessionId());
         // Check if token is valid
         if (tokenEntity.isExpired() || tokenEntity.isRevoked()) {
             log.warn("Token is expired or revoked: {}", tokenValue);
             return false;
         }
-        
         String sessionId = tokenEntity.getSessionId();
         if (sessionId == null) {
             log.warn("Token has no associated session: {}", tokenValue);
             return false;
         }
-        
         // Validate the session using existing method
         return validateSession(sessionId, request);
     }
@@ -364,6 +367,7 @@ public class SessionService {
                 
                 // Also mark the token as revoked
                 tokenEntity.setRevoked(true);
+                tokenEntity.setIsActive(false);
                 tokenRepository.save(tokenEntity);
                 
                 log.info("Session and token invalidated for user: {} with session ID: {}", 
@@ -372,6 +376,7 @@ public class SessionService {
                 log.warn("Token found but no session ID associated: {}", token);
                 // Still revoke the token even if no session
                 tokenEntity.setRevoked(true);
+                tokenEntity.setIsActive(false);
                 tokenRepository.save(tokenEntity);
             }
         } else {
