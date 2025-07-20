@@ -41,12 +41,19 @@ spring:
         max-concurrent-sessions: 3
         session-timeout-minutes: 30
         cleanup-interval-minutes: 5
+      rate-limit:
+        enabled: false
+        max-requests-per-minute: 10
+        reset-interval-ms: 60000
+        excluded-paths:
+          - "/auth/refresh-token"
+          - "/auth/validateToken"
 
 server:
   port: 8080
-#  ssl:
-#    enabled: true
-#    key-store: classpath:keystore.p12
-#    key-store-password: password
-#    key-store-type: PKCS12
-#    key-alias: springboot
+  ssl:
+    enabled: false
+    key-store: classpath:keystore.p12
+    key-store-password: password
+    key-store-type: PKCS12
+    key-alias: springboot
